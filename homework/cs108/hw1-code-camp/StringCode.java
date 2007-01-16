@@ -38,7 +38,9 @@ public class StringCode {
 	 * @return blown up string
 	 */
 	public static String blowup(String str) {
+		if (str.length() == 0) return "";
 		String blown_up_str = "";
+		//loop until one character away from end of string
 		for (int i=0; i < str.length() - 1; i++)
 		{
 			char current_char = str.charAt(i);
@@ -50,7 +52,10 @@ public class StringCode {
 			else
 				blown_up_str += current_char;
 		}
-		return blown_up_str + str.charAt(str.length() - 1);
+		char last_char = str.charAt(str.length() - 1);
+		if (!Character.isDigit(last_char))
+			blown_up_str += last_char;
+		return blown_up_str;
 	}
 	/**
 	 * Given a character, returns a string with that character repeated repeat_count times.
