@@ -10,28 +10,43 @@ public class CharGrid {
 	 * Does not make a copy.
 	 * @param grid
 	 */
-	public CharGrid(char[][] grid) {
+	public CharGrid(char[][] grid)
+	{
 		this.grid = grid;
 	}
 	
-	public char charAt(int x, int y) { return this.grid[x][y]; }
-	public char charAt(IntPoint2 point) { return this.grid[point.getX()][point.getY()]; }
+	public char charAt(int x, int y)
+	{
+		return this.grid[x][y];
+	}
+	public char charAt(IntPoint2 point)
+	{
+		return this.grid[point.getX()][point.getY()];
+	}
 	
 	public boolean isPointInside(IntPoint2 point)
 	{
 		int x = point.getX(), y = point.getY();
-		return 0 <= x && x <= this.gridWidth() && 0 <= y && y <= this.gridHeight();
+		return 0 <= x && x <= this.gridWidth() &&
+		       0 <= y && y <= this.gridHeight();
 	}
 
-	public int gridHeight() { return this.grid[0].length; }
-	public int gridWidth() { return this.grid.length; }
+	public int gridHeight()
+	{
+		return this.grid[0].length;
+	}
+	public int gridWidth()
+	{ 
+		return this.grid.length;
+	}
 	
 	/**
 	 * Returns the area for the given char in the grid. (see handout).
 	 * @param ch char to look for
 	 * @return area for given char
 	 */
-	public int charArea(char ch) {
+	public int charArea(char ch)
+	{
 		int left_most_x = -1, right_most_x = -1,
 			top_most_y = -1, bottom_most_y = -1;
 		
@@ -59,7 +74,7 @@ public class CharGrid {
 		
 		if (left_most_x == -1)
 			return 0;
-		return (right_most_x - left_most_x) * (bottom_most_y - top_most_y);
+		return (right_most_x - left_most_x + 1) * (bottom_most_y - top_most_y + 1);
 	}
 	
 	/**
