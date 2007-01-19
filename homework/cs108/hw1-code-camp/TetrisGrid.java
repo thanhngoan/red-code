@@ -1,6 +1,3 @@
-import java.lang.reflect.Array;
-import java.util.Collections;
-
 //
 // TetrisGrid encapsulates a tetris board and has
 // a clearRows() capability.
