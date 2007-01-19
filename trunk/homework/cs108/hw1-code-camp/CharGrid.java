@@ -15,26 +15,50 @@ public class CharGrid {
 		this.grid = grid;
 	}
 	
+	/**
+	 * 
+	 * @param x
+	 * @param y
+	 * @return the character at the given coordinates
+	 */
 	public char charAt(int x, int y)
 	{
 		return this.grid[x][y];
 	}
+	
+	/** 
+	 * @param point
+	 * @return the character at the given coordinates
+	 */
 	public char charAt(IntPoint2 point)
 	{
 		return this.grid[point.getX()][point.getY()];
 	}
 	
+	/**
+	 * @param point
+	 * @return if the point is at a valid location within the grid
+	 */
 	public boolean isPointInside(IntPoint2 point)
 	{
 		int x = point.getX(), y = point.getY();
 		return 0 <= x && x <= this.gridWidth() &&
 		       0 <= y && y <= this.gridHeight();
 	}
-
+	
+	/**
+	 * 
+	 * @return height of the grid
+	 */
 	public int gridHeight()
 	{
 		return this.grid[0].length;
 	}
+	
+	/**
+	 * 
+	 * @return width of the grid
+	 */
 	public int gridWidth()
 	{ 
 		return this.grid.length;
@@ -90,6 +114,10 @@ public class CharGrid {
 		return count;
 	}
 	
+	/**
+	 * @param point center of possible plus
+	 * @return whether there is a plus centered at the given point
+	 */
 	protected boolean existsPlusAtPoint(IntPoint2 point)
 	{
 		//char center_char = this.grid[point.getX()][point.getY()];
@@ -103,6 +131,12 @@ public class CharGrid {
 		return true;
 	}
 	
+	/**
+	 * 
+	 * @param center_point 
+	 * @param unit_direction a direction vector
+	 * @return Length of the arm centered at center_point in the direction of unit_direction
+	 */
 	protected int armLength(IntPoint2 center_point, IntPoint2 unit_direction)
 	{
 		int arm_length = -1;
