@@ -8,7 +8,8 @@ Your directory should now contain the following files:
  cool.flex
  test.cl
  lextest.cc      -> [course dir]/src/PA2/lextest.cc
- mycoolc         -> [course dir]/src/PA2/mycoolc
+ 
+mycoolc         -> [course dir]/src/PA2/mycoolc
  stringtab.cc    -> [course dir]/src/PA2/stringtab.cc
  utilities.cc    -> [course dir]/src/PA2/utilities.cc
  handle_flags.cc -> [course dir]/src/PA2/handle_flags.cc
