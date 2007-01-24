@@ -25,7 +25,7 @@ public class Piece {
 	private int[] skirt;
 	private int width;
 	private int height;
-	private Piece next; // "next" rotation
+	protected Piece next; // "next" rotation
 
 	static private Piece[] pieces;	// singleton static array of first rotations
 
@@ -34,9 +34,11 @@ public class Piece {
 	 Makes its own copy of the array and the TPoints inside it.
 	*/
 	public Piece(TPoint[] points) {
+		height = width = -1;
+		body = new TPoint[points.length];
+		for (int i=0; i < points.length; i++)
+			body[i] = (TPoint)points[i].clone();
 	}
-	
-
 	
 	
 	/**
@@ -49,9 +51,20 @@ public class Piece {
 	}
 
 	/**
+	 Returns a pointer to the piece's body. The caller
+	 should not modify this array.
+	*/
+	public TPoint[] getBody() {
+		return body;
+	}
+
+	/**
 	 Returns the width of the piece measured in blocks.
 	*/
 	public int getWidth() {
+		//the hack that is our way of lazy evaluation
+		if (width == -1)
+			computeAndSetDimensions();
 		return width;
 	}
 
@@ -59,15 +72,33 @@ public class Piece {
 	 Returns the height of the piece measured in blocks.
 	*/
 	public int getHeight() {
+		//the hack that is our way of lazy evaluation
+		if (height == -1)
+			computeAndSetDimensions();
 		return height;
 	}
-
+	
 	/**
-	 Returns a pointer to the piece's body. The caller
-	 should not modify this array.
-	*/
-	public TPoint[] getBody() {
-		return body;
+	 * Internal method that computes and sets all the relevant information about the body of this piece.
+	 * It does all of this in one pass since our goal for this assignment is "speed."
+	 * After calling this method, 
+	 */
+	protected void computeAndSetDimensions()
+	{
+		TPoint expanse = computeDimensions();
+		width = expanse.x; height = expanse.y;
+	}
+	
+	protected TPoint computeDimensions() {
+		TPoint maxes = new TPoint(0,0);
+		for (TPoint point: body)
+		{
+			if (point.x > maxes.x)
+				maxes.x = point.x;
+			if (point.y > maxes.y)
+				maxes.y = point.y;
+		}
+		return maxes.translated(new TPoint(1,1)); // return 1 more than the actual coordinate
 	}
 
 	/**
@@ -77,6 +108,24 @@ public class Piece {
 	 The caller should not modify this array.
 	*/
 	public int[] getSkirt() {
+		if (skirt != null)
+			return skirt;
+		else
+			return skirt = computeSkirt();
+	}
+	
+	/**
+	 * Computing the skirt now assumes that 
+	 * @return
+	 */
+	protected int[] computeSkirt()
+	{
+		int[] skirt = new int[getWidth()];
+		for (int i=0; i < skirt.length; i++)
+			skirt[i] = -1; //uninitialized state ensure that 
+		for (TPoint point : body)
+			if (skirt[point.x] > point.y || skirt[point.x] == -1)
+				skirt[point.x] = point.y;
 		return skirt;
 	}
 
@@ -86,7 +135,23 @@ public class Piece {
 	 rotated from the receiver.
 	 */
 	public Piece computeNextRotation() {
-		return null; // YOUR CODE HERE
+		TPoint[] rotatedBody = new TPoint[body.length];
+		// basically how this works is by rotating each point in the body 90 degrees
+		// and then translating it by the width of the entire piece
+		double angle = Math.toRadians(90);
+		for (int i=0; i < body.length; i++)
+			rotatedBody[i] = body[i].rotated(angle);
+		int minX = 0;
+		for (int i=0; i < rotatedBody.length; i++)
+			if (rotatedBody[i].x < minX)
+				minX = rotatedBody[i].x;
+		
+		int newWidth = minX*-1 + 1;
+		
+		for (int i=0; i < rotatedBody.length; i++)
+			rotatedBody[i] = rotatedBody[i].translated(new TPoint(newWidth - 1,0));
+			
+		return new Piece(rotatedBody); // YOUR CODE HERE
 	}
 
 	/**
@@ -99,8 +164,8 @@ public class Piece {
 		return next;
 	}
 	
-
-
+	protected final static boolean SORT_BODY_ARRAYS = false;
+	
 	/**
 	 Returns true if two pieces are the same --
 	 their bodies contain the same points.
@@ -110,7 +175,8 @@ public class Piece {
 	 if two rotations are effectively the same.
 	*/
 	public boolean equals(Object obj) {
-		// standard equals() technique 1
+		// standard equals()
+		//technique 1
 		if (obj == this) return true;
 		
 		// standard equals() technique 2
@@ -118,8 +184,29 @@ public class Piece {
 		if (!(obj instanceof Piece)) return false;
 		Piece other = (Piece)obj;
 		
-		// YOUR CODE HERE
-		return true;
+		// must have the same number of points
+		if (other.body.length != body.length)
+			return false;
+		
+		if (SORT_BODY_ARRAYS) // O(n) time for equal objects. less for non-equal
+		{
+			return Arrays.deepEquals(other.body, body);
+		}
+		else // O(n^2) time for equal objects.  less for non-equal
+		{
+			for (TPoint otherPoint : other.body)
+				if (!bodyContainsPoint(otherPoint))
+					return false;
+			return true;
+		}
+	}
+	
+	protected boolean bodyContainsPoint(TPoint test)
+	{
+		for (TPoint point : body)
+			if (point.equals(test))
+				return true;
+		return false;
 	}
 
 
@@ -165,8 +252,6 @@ public class Piece {
 				makeFastRotations(new Piece(PYRAMID_STR)),
 			};
 		}
-		
-		
 		return Piece.pieces;
 	}
 	
@@ -185,11 +270,26 @@ public class Piece {
 	 to the first piece.
 	*/
 	private static Piece makeFastRotations(Piece root) {
-		// YOUR CODE HERE
-		return null; // YOUR CODE HERE
+		root.computeAndSetSubsequentRotationsUntilEquals(root);
+		return root;
 	}
 	
-	
+	/**
+	 * 
+	 * @param finalPiece
+	 */
+	protected void computeAndSetSubsequentRotationsUntilEquals(Piece finalPiece)
+	{
+		Piece nextPiece = computeNextRotation();
+		if (nextPiece.equals(finalPiece))
+			next = finalPiece;
+		else
+		{
+			next = nextPiece;
+			//tail recursive so this should not eat up the stack
+			next.computeAndSetSubsequentRotationsUntilEquals(finalPiece);
+		}	
+	}
 
 	/**
 	 Given a string of x,y pairs ("0 0	0 1 0 2 1 0"), parses
@@ -197,7 +297,7 @@ public class Piece {
 	 (Provided code)
 	*/
 	private static TPoint[] parsePoints(String string) {
-		List points = new ArrayList();
+		List<TPoint> points = new ArrayList<TPoint>();
 		StringTokenizer tok = new StringTokenizer(string);
 		try {
 			while(tok.hasMoreTokens()) {
@@ -215,8 +315,5 @@ public class Piece {
 		TPoint[] array = (TPoint[]) points.toArray(new TPoint[0]);
 		return array;
 	}
-
-	
-
 
 }
