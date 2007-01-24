@@ -13,7 +13,7 @@ public class PieceTest extends TestCase {
 	// For example, the code below sets up some
 	// pyramid and s pieces in instance variables
 	// that can be used in tests.
-	private Piece pyr1, pyr2, pyr3, pyr4, square;
+	private Piece pyr1, pyr2, pyr3, pyr4;
 	private Piece s, sRotated;
 
 	protected void setUp() throws Exception {
@@ -26,8 +26,6 @@ public class PieceTest extends TestCase {
 		
 		s = new Piece(Piece.S1_STR);
 		sRotated = s.computeNextRotation();
-
-		square = new Piece(Piece.SQUARE_STR);
 	}
 	
 	// Here are some sample tests to get you started
@@ -48,11 +46,34 @@ public class PieceTest extends TestCase {
 		assertEquals(4, l.getHeight());
 	}
 	
+	public int numberOfUniqueNexts(Piece piece)
+	{
+		int count = 1;
+		for (Piece next = piece.fastRotation(); next != piece; next = next.fastRotation())
+			count++;
+		return count;
+	}
+	
 	public void testFastRotation() {
 		Piece[] pieces = Piece.getPieces();
 		Piece square = pieces[5];
 		// Check size of pyr piece
 		assertSame(square, square.fastRotation());
+		
+		//this is a relatively thorough test of the rotation code
+		assertEquals(1, numberOfUniqueNexts(pieces[Piece.SQUARE]));
+		assertEquals(4, numberOfUniqueNexts(pieces[Piece.PYRAMID]));
+		assertEquals(2, numberOfUniqueNexts(pieces[Piece.STICK]));
+		assertEquals(4, numberOfUniqueNexts(pieces[Piece.L1]));
+		assertEquals(4, numberOfUniqueNexts(pieces[Piece.L2]));
+		assertEquals(2, numberOfUniqueNexts(pieces[Piece.S1]));
+		assertEquals(2, numberOfUniqueNexts(pieces[Piece.S2]));
+		assertSame(pieces, Piece.getPieces());
+	}
+	
+	public void testRotationMore() {
+		assertEquals(pyr4, pyr4);
+		assertEquals(pyr1,pyr1.computeNextRotation().computeNextRotation().computeNextRotation().computeNextRotation());
 	}
 	
 	
