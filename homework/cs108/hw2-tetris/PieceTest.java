@@ -13,12 +13,12 @@ public class PieceTest extends TestCase {
 	// For example, the code below sets up some
 	// pyramid and s pieces in instance variables
 	// that can be used in tests.
-	private Piece pyr1, pyr2, pyr3, pyr4;
+	private Piece pyr1, pyr2, pyr3, pyr4, square;
 	private Piece s, sRotated;
 
 	protected void setUp() throws Exception {
 		super.setUp();
-		
+
 		pyr1 = new Piece(Piece.PYRAMID_STR);
 		pyr2 = pyr1.computeNextRotation();
 		pyr3 = pyr2.computeNextRotation();
@@ -26,10 +26,12 @@ public class PieceTest extends TestCase {
 		
 		s = new Piece(Piece.S1_STR);
 		sRotated = s.computeNextRotation();
+
+		square = new Piece(Piece.SQUARE_STR);
 	}
 	
 	// Here are some sample tests to get you started
-	
+
 	public void testSampleSize() {
 		// Check size of pyr piece
 		assertEquals(3, pyr1.getWidth());
@@ -44,6 +46,13 @@ public class PieceTest extends TestCase {
 		Piece l = new Piece(Piece.STICK_STR);
 		assertEquals(1, l.getWidth());
 		assertEquals(4, l.getHeight());
+	}
+	
+	public void testFastRotation() {
+		Piece[] pieces = Piece.getPieces();
+		Piece square = pieces[5];
+		// Check size of pyr piece
+		assertSame(square, square.fastRotation());
 	}
 	
 	

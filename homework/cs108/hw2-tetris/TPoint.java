@@ -19,6 +19,8 @@ public class TPoint {
 		this.y = y;
 	}
 	
+	public Object clone() { return new TPoint(x,y);}
+	
 	// Creates a TPoint, copied from an existing TPoint
 	public TPoint(TPoint point) {
 		this.x = point.x;
@@ -40,5 +42,35 @@ public class TPoint {
 	// human-readable String from object
 	public String toString() {
 		return "(" + x + "," + y + ")";
+	}
+	
+	/**
+	 * Immutable method that returns a point with swapped x and y.
+	 * 
+	 */
+	public TPoint swapped() { return new TPoint(y,x); }
+	
+	/**
+	 * 2 Dimensional rotation matrix is
+	 * <math format="LaTeX">
+	 * 	M(\theta) = \begin{bmatrix} 
+	 *	\cos{\theta} & -\sin{\theta} \\
+	 *	\sin{\theta} & \cos{\theta} 
+	 *	\end{bmatrix}
+	 * </math>
+	 */
+	public TPoint rotated(double angleInRadians)
+	{
+		Math.sin(3);
+		double cos = Math.cos(angleInRadians), sin = Math.sin(angleInRadians);
+		double rotatedX = cos * x - sin*y,
+			   rotatedY = sin * x + cos*y;
+		return new TPoint((int)Math.round(rotatedX),
+						  (int)Math.round(rotatedY));
+	}
+	
+	public TPoint translated(TPoint addPoint)
+	{
+		return new TPoint(addPoint.x + x, addPoint.y + y);
 	}
 }
