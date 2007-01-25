@@ -43,6 +43,8 @@ extern YYSTYPE cool_yylval;
  *  Add Your own definitions here
  */
 int comment_level = 0; //holds the level of nested comments we are in.  if we are in no comment, it is 0
+boolean are_we_escaping = false;
+
 %}
 
 /*
@@ -51,13 +53,11 @@ int comment_level = 0; //holds the level of nested comments we are in.  if we ar
 
 DARROW          =>
 INTEGER         [0-9]+
-KEYWORD         class|else|fi|if|in|inherits|isvoid|let|loop|pool|then|while|case|esac|new|of|not|false|true
-IDENTIFIER      3
 WS              [\n\f\r\t\v\32]+
 DOUBLE_DASH     --
 COMMENT_START   "(*"
-COMMENT_CONTENT .*/"*)"
 COMMENT_END     "*)"
+
 %%
 
  /*
@@ -68,16 +68,32 @@ COMMENT_END     "*)"
  /*
   *  The multiple-character operators.
   */
+
 {DARROW}	      { return (DARROW); }
-{INTEGER}             { return (DARROW); }
-{KEYWORD}             { return (DARROW); }
-.*/"*)" { return (DARROW); }
-{COMMENT_CONTENT}     { return (DARROW);}
+{INTEGER}             { return inttable.yytext }
 
  /*
   * Keywords are case-insensitive except for the values true and false,
   * which must begin with a lower-case letter.
   */
+
+class      { return (CLASS); }
+else      { return (ELSE); }
+fi      { return (FI); }
+if      { return (IF); }
+in      { return (IN); }
+inherits      { return (INHERITS); }
+isvoid      { return (ISVOID); }
+let      { return (LET); }
+loop      { return (LOOP); }
+pool      { return (POOL); }
+then      { return (THEN); }
+while      { return (WHILE); }
+case      { return (CASE); }
+esac      { return (ESAC); }
+new      { return (NEW); }
+of      { return (OF); }
+not      { return (NOT); }
 
 
  /*
