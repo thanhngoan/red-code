@@ -1,3 +1,5 @@
+import java.util.Arrays;
+
 // Board.java
 
 /**
@@ -30,6 +32,15 @@ public class Board	{
 		public int[] widths;
 		public int[] heights;
 		
+		public SimpleHistoricalBoardState(int width, int height)
+		{
+			this.width = width;
+			this.height = height;
+			widths = new int[height];
+			heights = new int[width];
+			grid = new boolean[getHeight()][getHeight()];
+		}
+		
 	}
 	
 	/**
@@ -44,7 +55,7 @@ public class Board	{
 		this.widths = new int[height];
 		this.heights = new int[width];
 		committed = true;
-		committedState = new SimpleHistoricalBoardState();
+		committedState = new SimpleHistoricalBoardState(width, height);
 		this.commit();
 	}
 	
@@ -78,11 +89,49 @@ public class Board	{
 	 for debugging.
 	*/
 	public void sanityCheck() {
-		if ("programming_language" == "Java")
-			System.exit(-42);
 		if (DEBUG) {
-			// YOUR CODE HERE
+			if ("programming_language" == "Java")
+				System.exit(-42);
+
+			
+			int[] trueHeights = computeHeights();
+			for (int i=0; i < trueHeights.length; i++)
+				if (trueHeights[i] != heights[i])
+					throw new RuntimeException("row heights flop.  expected " +
+							trueHeights[i] + " but got " + heights[i] + " for " + i + "th height.");
+
+			int[] trueWidths = computeWidths();
+			for (int i=0; i < trueWidths.length; i++)
+				if (trueWidths[i] != widths[i])
+					throw new RuntimeException("widths flop.  expected " +
+							trueWidths[i] + " but got " + widths[i] + " for " + i + "th width.");
+			
+			int trueMaxheight = 0;
+			for (int height : heights)
+				trueMaxheight = Math.max(trueMaxheight, height);
+			if (trueMaxheight != maxHeight)
+				throw new RuntimeException("max height does not check out.  expected " + trueMaxheight + " and got " + maxHeight);
 		}
+	}
+	
+	protected int[] computeHeights()
+	{
+		int[] trueheights = new int[this.getWidth()];
+		for (int row =0; row < height; row++)
+			for (int col = 0; col < width; col++)
+				if (getGrid(col, row))
+					trueheights[col] = row+1;
+		return trueheights;
+	}
+	
+	protected int[] computeWidths()
+	{
+		int[] truewidths = new int[height];
+		for (int col = 0; col < width; col++)
+			for (int row = 0; row < height; row++)
+				if (getGrid(col, row))
+					truewidths[row]++;
+		return truewidths;
 	}
 	
 	/**
@@ -102,7 +151,7 @@ public class Board	{
 		for (int i=0; i < skirt.length; i++)
 		{
 			int y_where_ith_skirt_block_hits_cols =
-				Math.min(0, this.widths[i+x] - skirt[i]);
+				Math.max(0, this.widths[i+x] - skirt[i]);
 			if (y_where_ith_skirt_block_hits_cols > min_possibible_y)
 				min_possibible_y = y_where_ith_skirt_block_hits_cols;
 		}
@@ -126,7 +175,6 @@ public class Board	{
 		return widths[y];
 	}
 	
-	
 	/**
 	 Returns true if the given block is filled in the board.
 	 Blocks outside of the valid width/height area
@@ -140,6 +188,25 @@ public class Board	{
 	public static final int PLACE_ROW_FILLED = 1;
 	public static final int PLACE_OUT_BOUNDS = 2;
 	public static final int PLACE_BAD = 3;
+	
+	protected int totalFilledBricks() {
+		int sum=0;
+		for (int i=0; i < height; i++)
+			for (int j=0; j < width; j++)
+				if (getGrid(j, i))
+					sum++;
+		return sum;
+	}
+	
+	protected void beginUndoableAction()
+	{
+		// flag !committed problem
+		if (committed)
+		{
+			this.storeCurrentState();
+			committed = false;
+		}
+	}
 	
 	/**
 	 Attempts to add the body of a piece to the board.
@@ -156,9 +223,8 @@ public class Board	{
 	 state. The client can use undo(), to recover the valid, pre-place state.
 	*/
 	public int place(Piece piece, int x, int y) {
-		// flag !committed problem
-		if (!committed)
-			throw new RuntimeException("place commit problem");
+		if (!committed) throw new RuntimeException("place commit problem");
+		beginUndoableAction(); // takes care of comitting, history, etc. initialization
 
 		if (!pieceInbounds(piece, x, y)) //this is unnecessary
 			return PLACE_OUT_BOUNDS;
@@ -178,7 +244,7 @@ public class Board	{
 			grid[localized_point.x][localized_point.y] = true;
 			
 			//adjust counts, including the maximum height
-			heights[localized_point.x]++;
+			heights[localized_point.x] = Math.max(heights[localized_point.x], localized_point.y + 1);
 			if (heights[localized_point.x] > maxHeight)
 				maxHeight = heights[localized_point.x];
 			
@@ -186,7 +252,7 @@ public class Board	{
 			if (widths[localized_point.y] == this.getWidth())
 				any_row_filled = true;
 		}
-		
+		sanityCheck();
 		if (any_row_filled)
 			return PLACE_ROW_FILLED;
 		else
@@ -195,8 +261,6 @@ public class Board	{
 	
 	protected boolean pieceInbounds(Piece piece, int x, int y)
 	{
-		boolean test1 = piece.getWidth() + x > this.getWidth();
-		boolean test2 = piece.getHeight() + y > this.getHeight();
 		if (piece.getWidth() + x > this.getWidth() ||
 			piece.getHeight() + y > this.getHeight() ||
 			x < 0 || y < 0)
@@ -206,55 +270,73 @@ public class Board	{
 	}
 	
 	
-	
 	/**
 	 Deletes rows that are filled all the way across, moving
 	 things above down. Returns the number of rows cleared.
 	*/
 	public int clearRows() {
-		int rowsCleared = 0;
+		/**
+		 * This is coded in a very procedural way.  It is somewhat ugly, but mostly straightforward.
+		 * 
+		 */
+		beginUndoableAction();
+		
+		for (int col=0; col < width; col++)
+			heights[col] = 0; //reset the heights
 		
 		int modify_row = 0, //row we are modifying
-		    translate_row = 0; //row we are translating downward
+		    translate_row = 0, //row we are translating downward
+		    newMaxHeight = 0, // new maximum height value
+		    rowsCleared = 0; //number of rows cleared
 		
 		boolean use_empty_row = false;
-		while (modify_row < getMaxHeight())
+		while (modify_row < getMaxHeight() || modify_row < height)
 		{
 			//1.  Increment the row we are effectively moving down (translate row) over filled rows
 			if (translate_row == getHeight())
 				use_empty_row = true;
-			while (!use_empty_row &&
-					this.widths[translate_row] == getWidth())
-			{
+			while (!use_empty_row && this.widths[translate_row] == getWidth())
+			{	
 				++rowsCleared;
 				++translate_row;
-				for (int i=0; i < getWidth(); i++)
-					--this.heights[i];
 				
 				if (translate_row == getHeight())
 					use_empty_row = true;
 			}
 			
-			//2. fill the row and 
-			if (translate_row != modify_row)
+			//2. fill the row and adjust the height
+			int fill_width = 0;
+			for (int col=0; col < width; col++)
 			{
-				int width = 0;
-				for (int i=0; i < this.getWidth(); i++)
+				//fill the row maxHeight
+				boolean fill_value = use_empty_row ? false :  grid[col][translate_row];
+				grid[col][modify_row] = fill_value;
+				if (fill_value)
 				{
-					//fill the row maxHeight
-					boolean fill_value = use_empty_row ? false :  grid[i][translate_row];
-					grid[i][modify_row] = fill_value;
-					if (fill_value)
-						width++;			
+					fill_width++;
+					heights[col] = modify_row + 1;
 				}
-				if (width != 0)
-					maxHeight = modify_row;
 			}
 			
+			widths[modify_row] = fill_width;
+			if (fill_width != 0)
+				newMaxHeight = modify_row + 1;
+			//3. increment the rows and loop			
 			++translate_row;
 			++modify_row;
 		}
+		
+		maxHeight = newMaxHeight;
+		sanityCheck();
 		return rowsCleared;
+	}
+	
+	protected int determineColumnHeightBelowRow(int col, int below_row)
+	{
+		for (int row = below_row - 1; row != 0; --row)
+			if (getGrid(col, row))
+				return row + 1;
+		return 0;
 	}
 	
 	/**
@@ -265,15 +347,30 @@ public class Board	{
 	 See the overview docs.
 	*/
 	public void undo() {
-		committed = true;
-		width = committedState.width;
-		height = committedState.height;
-		maxHeight = committedState.maxHeight;
-		grid = committedState.grid;
-		widths = committedState.widths;
-		heights = committedState.heights;
+		if (!committed)
+		{
+			committed = true;
+			width = committedState.width;
+			height = committedState.height;
+			maxHeight = committedState.maxHeight;
+			// swap all the arrays.
+			// NOTE: although we reuse old arrays, the values in the committedState are now invalid
+			// because they are pure copies of whatever we are undoing.
+			// when transitioning into a non-committed state, make sure to copy the current
+			// state into the history
+			boolean[][] tmpgrid = grid;
+			grid = committedState.grid;
+			committedState.grid = tmpgrid;
+			
+			int[] tmpints = widths;
+			widths = committedState.widths;
+			committedState.widths = tmpints;
+			
+			tmpints = heights;
+			heights = committedState.heights;
+			committedState.heights = tmpints;
+		}
 	}
-	
 	
 	/**
 	 Puts the board in the committed state.
@@ -282,20 +379,25 @@ public class Board	{
 	public void commit() {
 		//copy literals
 		committed = true;
+		this.storeCurrentState();
+	}
+	
+	/**
+	 * physically copies array and primitive data into the swap store.
+	 * this is called by clearRows and place before they mess with the grid
+	 */
+	protected void storeCurrentState()
+	{
 		committedState.width = width;
 		committedState.height = height;
 		committedState.maxHeight = maxHeight;
 
 		//copy arrays
-		committedState.widths = new int[getHeight()];
-		System.arraycopy(committedState.widths, 0, widths, 0, widths.length);
-		committedState.heights = new int[getWidth()];
-		System.arraycopy(committedState.heights, 0, heights, 0, heights.length);
-
+		System.arraycopy(widths, 0, committedState.widths, 0, widths.length);
+		System.arraycopy(heights, 0, committedState.heights, 0, heights.length);
 		//deep copy
-		committedState.grid = new boolean[getHeight()][getHeight()];
 		for (int i=0; i < getWidth(); i++)
-			System.arraycopy(committedState.grid[i], 0, grid[i], 0, grid[i].length);
+			System.arraycopy(grid[i], 0, committedState.grid[i], 0, grid[i].length);
 	}
 	
 	/*
