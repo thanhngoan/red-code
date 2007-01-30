@@ -2,8 +2,8 @@ import junit.framework.TestCase;
 
 
 public class BoardTest extends TestCase {
-	Board b;
-	Piece pyr1, pyr2, pyr3, pyr4, s, sRotated;
+	Board b, btopclear, bundo1, bfill, bfloat;
+	Piece pyr1, pyr2, pyr3, pyr4, s, sRotated, stick_up, stick_flat;
 
 	// This shows how to build things in setUp() to re-use
 	// across tests.
@@ -14,6 +14,13 @@ public class BoardTest extends TestCase {
 	
 	protected void setUp() throws Exception {
 		b = new Board(3, 6);
+		btopclear = new Board(4, 6);
+		bundo1 = new Board(4, 6);
+		bfill = new Board(4, 9);
+		bfloat = new Board(6, 10);
+		stick_up = new Piece(Piece.STICK_STR);
+		stick_flat = stick_up.computeNextRotation();
+		
 		
 		pyr1 = new Piece(Piece.PYRAMID_STR);
 		pyr2 = pyr1.computeNextRotation();
@@ -45,6 +52,111 @@ public class BoardTest extends TestCase {
 		assertEquals(4, b.getColumnHeight(1));
 		assertEquals(3, b.getColumnHeight(2));
 		assertEquals(4, b.getMaxHeight());
+	}
+	
+	/**
+	 * But sticks on top and watch clearRows choke.
+	 */
+	public void testTopClear() {
+		btopclear.place(stick_up, 3,0);
+		assertEquals(0, btopclear.getColumnHeight(0));
+		assertEquals(0, btopclear.getColumnHeight(1));
+		assertEquals(0, btopclear.getColumnHeight(2));
+		assertEquals(4, btopclear.getColumnHeight(3));
+		btopclear.commit();
+		btopclear.place(stick_flat, 0,4);
+		assertEquals(5, btopclear.getColumnHeight(0));
+		assertEquals(5, btopclear.getColumnHeight(1));
+		assertEquals(5, btopclear.getColumnHeight(2));
+		assertEquals(5, btopclear.getColumnHeight(3));
+		assertEquals(1, btopclear.getRowWidth(0));
+		assertEquals(1, btopclear.getRowWidth(1));
+		assertEquals(1, btopclear.getRowWidth(2));
+		assertEquals(1, btopclear.getRowWidth(3));
+		assertEquals(4, btopclear.getRowWidth(4));
+		btopclear.clearRows();
+		assertEquals(0, btopclear.getColumnHeight(0));
+		assertEquals(0, btopclear.getColumnHeight(1));
+		assertEquals(0, btopclear.getColumnHeight(2));
+		assertEquals(4, btopclear.getColumnHeight(3));
+	}
+	
+	public void testUndo1() {
+		int result = 0;
+		result = bundo1.place(stick_up, 3,0);
+		assertEquals(Board.PLACE_OK, result);
+		assertEquals(0, bundo1.getColumnHeight(0));
+		assertEquals(0, bundo1.getColumnHeight(1));
+		assertEquals(0, bundo1.getColumnHeight(2));
+		assertEquals(4, bundo1.getColumnHeight(3));
+		assertEquals(1, bundo1.getRowWidth(0));
+		assertEquals(1, bundo1.getRowWidth(1));
+		assertEquals(1, bundo1.getRowWidth(2));
+		assertEquals(1, bundo1.getRowWidth(3));
+		bundo1.commit();
+		result = bundo1.place(stick_up, 2,0);
+		assertEquals(Board.PLACE_OK, result);
+		assertEquals(0, bundo1.getColumnHeight(0));
+		assertEquals(0, bundo1.getColumnHeight(1));
+		assertEquals(4, bundo1.getColumnHeight(2));
+		assertEquals(4, bundo1.getColumnHeight(3));
+		assertEquals(2, bundo1.getRowWidth(0));
+		assertEquals(2, bundo1.getRowWidth(1));
+		assertEquals(2, bundo1.getRowWidth(2));
+		assertEquals(2, bundo1.getRowWidth(3));
+		bundo1.undo();
+		assertEquals(0, bundo1.getColumnHeight(0));
+		assertEquals(0, bundo1.getColumnHeight(1));
+		assertEquals(0, bundo1.getColumnHeight(2));
+		assertEquals(4, bundo1.getColumnHeight(3));
+		result = bundo1.place(stick_up, 3,0);
+		
+		assertEquals(Board.PLACE_BAD, result);
+		bundo1.undo();
+		assertEquals(0, bundo1.getColumnHeight(0));
+		assertEquals(0, bundo1.getColumnHeight(1));
+		assertEquals(0, bundo1.getColumnHeight(2));
+		assertEquals(4, bundo1.getColumnHeight(3));
+	}
+	
+	public void testFillManyRows() {
+		int result = 0;
+		result = bfill.place(stick_up, 0,0);
+		assertEquals(Board.PLACE_OK, result);
+		bfill.commit();
+		result = bfill.place(stick_up, 1,0);
+		assertEquals(Board.PLACE_OK, result);
+		bfill.commit();
+		result = bfill.place(stick_up, 2,0);
+		assertEquals(Board.PLACE_OK, result);
+		bfill.commit();
+		result = bfill.place(stick_up, 3,0);
+		assertEquals(Board.PLACE_ROW_FILLED, result);
+		bfill.commit();
+		assertEquals(4 ,bfill.dropHeight(pyr1, 0));
+		result = bfill.place(pyr1, 0,4);
+		assertEquals(Board.PLACE_OK, result);
+		bfill.commit();
+		result = bfill.place(stick_flat, 0, 4);
+		assertEquals(Board.PLACE_BAD, result);
+		bfill.undo();
+		result = bfill.place(stick_flat, 0, 6);
+		assertEquals(Board.PLACE_ROW_FILLED, result);
+		bfill.commit();
+		bfill.clearRows();
+		assertEquals(1, bfill.getColumnHeight(0));
+		assertEquals(2, bfill.getColumnHeight(1));
+		assertEquals(1, bfill.getColumnHeight(2));
+		assertEquals(0, bfill.getColumnHeight(3));
+		assertEquals(2, bfill.getMaxHeight());
+	}
+	
+	public void testFloaties() {
+		int result = 0;
+		result = bfloat.place(stick_up, 1,6);
+		assertEquals(Board.PLACE_OK, result);
+		bfloat.commit();
+		bfloat.clearRows();
 	}
 	
 	// Makre  more tests, by putting together longer series of 
