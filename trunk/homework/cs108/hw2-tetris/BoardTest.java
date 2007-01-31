@@ -58,11 +58,13 @@ public class BoardTest extends TestCase {
 	 * But sticks on top and watch clearRows choke.
 	 */
 	public void testTopClear() {
+		assertEquals(0, btopclear.getMaxHeight());
 		btopclear.place(stick_up, 3,0);
 		assertEquals(0, btopclear.getColumnHeight(0));
 		assertEquals(0, btopclear.getColumnHeight(1));
 		assertEquals(0, btopclear.getColumnHeight(2));
 		assertEquals(4, btopclear.getColumnHeight(3));
+		assertEquals(4, btopclear.getMaxHeight());
 		btopclear.commit();
 		btopclear.place(stick_flat, 0,4);
 		assertEquals(5, btopclear.getColumnHeight(0));
@@ -74,11 +76,16 @@ public class BoardTest extends TestCase {
 		assertEquals(1, btopclear.getRowWidth(2));
 		assertEquals(1, btopclear.getRowWidth(3));
 		assertEquals(4, btopclear.getRowWidth(4));
+		assertEquals(5 ,btopclear.dropHeight(stick_flat, 0));
+		assertEquals(5 ,btopclear.dropHeight(stick_up, 0));
+		assertEquals(5 ,btopclear.dropHeight(pyr1, 0));
+		assertEquals(5, btopclear.getMaxHeight());
 		btopclear.clearRows();
 		assertEquals(0, btopclear.getColumnHeight(0));
 		assertEquals(0, btopclear.getColumnHeight(1));
 		assertEquals(0, btopclear.getColumnHeight(2));
 		assertEquals(4, btopclear.getColumnHeight(3));
+		assertEquals(4, btopclear.getMaxHeight());
 	}
 	
 	public void testUndo1() {
@@ -117,6 +124,7 @@ public class BoardTest extends TestCase {
 		assertEquals(0, bundo1.getColumnHeight(1));
 		assertEquals(0, bundo1.getColumnHeight(2));
 		assertEquals(4, bundo1.getColumnHeight(3));
+		assertEquals(4, bundo1.getMaxHeight());
 	}
 	
 	public void testFillManyRows() {
@@ -149,6 +157,8 @@ public class BoardTest extends TestCase {
 		assertEquals(1, bfill.getColumnHeight(2));
 		assertEquals(0, bfill.getColumnHeight(3));
 		assertEquals(2, bfill.getMaxHeight());
+		assertEquals(2 ,bfill.dropHeight(pyr1, 0));
+		assertEquals(1 ,bfill.dropHeight(pyr4, 0));
 	}
 	
 	public void testFloaties() {
@@ -157,6 +167,16 @@ public class BoardTest extends TestCase {
 		assertEquals(Board.PLACE_OK, result);
 		bfloat.commit();
 		bfloat.clearRows();
+	}
+
+	
+	protected int totalFilledBricks(Board board) {
+		int sum=0;
+		for (int i=0; i < board.getHeight(); i++)
+			for (int j=0; j < board.getWidth(); j++)
+				if (board.getGrid(j, i))
+					sum++;
+		return sum;
 	}
 	
 	// Makre  more tests, by putting together longer series of 

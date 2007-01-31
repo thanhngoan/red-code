@@ -151,7 +151,7 @@ public class Board	{
 		for (int i=0; i < skirt.length; i++)
 		{
 			int y_where_ith_skirt_block_hits_cols =
-				Math.max(0, this.widths[i+x] - skirt[i]);
+				Math.max(0, this.heights[i+x] - skirt[i]);
 			if (y_where_ith_skirt_block_hits_cols > min_possibible_y)
 				min_possibible_y = y_where_ith_skirt_block_hits_cols;
 		}
@@ -188,15 +188,6 @@ public class Board	{
 	public static final int PLACE_ROW_FILLED = 1;
 	public static final int PLACE_OUT_BOUNDS = 2;
 	public static final int PLACE_BAD = 3;
-	
-	protected int totalFilledBricks() {
-		int sum=0;
-		for (int i=0; i < height; i++)
-			for (int j=0; j < width; j++)
-				if (getGrid(j, i))
-					sum++;
-		return sum;
-	}
 	
 	protected void beginUndoableAction()
 	{

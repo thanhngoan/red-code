@@ -695,7 +695,7 @@ public class JTetris extends JComponent {
 		
 		final int pixels = 16;
 		JTetris tetris;
-		boolean makeBrainVersion = false;
+		boolean makeBrainVersion = true;
 		// Controls if main() makes JTetris or JBrainTetris
 		// (default false initially)
 
