@@ -1,6 +1,14 @@
 user:       reddaly (Daly, Red)
 email:      reddaly@gmail.com
-assignment: cs108 hw2 - part 1
+assignment: cs108 hw2 - part 2
 
-notes: less painful than last time for some reason :)
+notes:
+I included a simple extension that performs the opposite function of the adversary, giving you
+pieces that leave fewer holes.  I mainly did this because the brain loses too easily, and so
+giving it an extra little foresight helps it last longer.  There is an extra slider that 
+varies the randomness of the friend.  The way it determines which piece to drop is somewhat
+but not too convoluted, and documented in the function itself.  I think 10 / 30  on the adversary
+/ friend sliders makes the game last a while.
+
+It would have been cool to try out AI, but I do not enjoy programming in Java enough :(.
 
