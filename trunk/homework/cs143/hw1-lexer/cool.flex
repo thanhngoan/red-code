@@ -22,6 +22,13 @@
 
 extern FILE *fin; /* we read from this file */
 
+extern void cool_yyrestart(FILE * f)
+{
+  yyrestart(f);
+}
+
+#define THE_THING 5
+
 /* define YY_INPUT so we read from the FILE fin:
  * This change makes it possible to use this scanner in
  * the Cool compiler.
@@ -44,6 +51,7 @@ extern YYSTYPE cool_yylval;
  */
 int comment_level = 0; //holds the level of nested comments we are in.  if we are in no comment, it is 0
 std::string str_or_comment = "";
+bool invalid_string_p = false; //true if the current string has been condemned for invalid characters
 %}
 
 /*
@@ -57,35 +65,55 @@ OBJECT_IDENTIFIER    [a-z]([a-zA-Z0-9_]*)
 TYPE_IDENTIFIER      [A-Z]([a-zA-Z0-9_]*)
 WS                   [\n\f\r\t\v\32 ]
 DOUBLE_DASH          --
-COMMENT_START        \(\*
-COMMENT_END          \*\)
+COMMENT_START        ("(*")
+COMMENT_END          ("*)")
 NEWLINE              \n
 
-%s IN_COMMENT IN_STRING
+
+%x INCOMMENT INSTRING
 %%
 
  /*
   *  Nested comments
   */
-<INITIAL,IN_COMMENT>COMMENT_START        {
+
+<INITIAL,INCOMMENT>\(\*        {
   ++comment_level;
-  BEGIN(IN_COMMENT);
+  BEGIN(INCOMMENT);
 }
 
-<IN_COMMENT>COMMENT_END                  {
+<INCOMMENT>\*\)                  {
   --comment_level;
-  if (comment_level == 0)
-    BEGIN(INITIAL);
-  else if (comment_level < 0)
+  if (comment_level <= 0)
     {
-      comment_level = 0;
-      cool_yylval.error_msg = "Unmatched *)";
-      return (ERROR);
+      str_or_comment = ""; // reset the comment text, which is currently not used but might be useful in the future.
+      if (comment_level == 0) //it's cool 
+        BEGIN(INITIAL);
+      else //this should theoretically be impossible to reach
+        {
+          BEGIN(INITIAL);
+          comment_level = 0;
+          cool_yylval.error_msg = "Unmatched *)";
+          return (ERROR);
+        }
     }
-}
+ }
+<INITIAL>\*\)     {
+  cool_yylval.error_msg = "Unmatched *)";
+  return (ERROR);
+ }
 
-<IN_COMMENT>.   { str_or_comment += yytext;}
+<INCOMMENT><<EOF>>            {
+  BEGIN(INITIAL);
+  cool_yylval.error_msg = "EOF in comment";
+  return (ERROR);
+ }
 
+<INCOMMENT>.   { str_or_comment += yytext;}
+
+ /* single-line comments */
+
+{DOUBLE_DASH}.*         { }
  /*
   *  The multiple-character operators.
   */
@@ -98,27 +126,36 @@ NEWLINE              \n
   * which must begin with a lower-case letter.
   */
 
+[Cc][Ll][Aa][Ss][Ss]      { return (CLASS); }  // class
+[Ee][Ll][Ss][Ee]      { return (ELSE); }  // else
+[Ff][Ii]      { return (FI); }  // fi
+[Ii][Ff]      { return (IF); }  // if
+[Ii][Nn]      { return (IN); }  // in
+[Ii][Nn][Hh][Ee][Rr][Ii][Tt][Ss]      { return (INHERITS); }  // inherits
+[Ii][Ss][Vv][Oo][Ii][Dd]      { return (ISVOID); }  // isvoid
+[Ll][Ee][Tt]      { return (LET); }  // let
+[Ll][Oo][Oo][Pp]      { return (LOOP); }  // loop
+[Pp][Oo][Oo][Ll]      { return (POOL); }  // pool
+[Tt][Hh][Ee][Nn]      { return (THEN); }  // then
+[Ww][Hh][Ii][Ll][Ee]      { return (WHILE); }  // while
+[Cc][Aa][Ss][Ee]      { return (CASE); }  // case
+[Ee][Ss][Aa][Cc]      { return (ESAC); }  // esac
+[Nn][Ee][Ww]      { return (NEW); }  // new
+[Oo][Ff]      { return (OF); }  // of
+[Nn][Oo][Tt]      { return (NOT); }  // not
 
-class      { return (CLASS); }
-else      { return (ELSE); }
-fi      { return (FI); }
-if      { return (IF); }
-in      { return (IN); }
-inherits      { return (INHERITS); }
-isvoid      { return (ISVOID); }
-let      { return (LET); }
-loop      { return (LOOP); }
-pool      { return (POOL); }
-then      { return (THEN); }
-while      { return (WHILE); }
-case      { return (CASE); }
-esac      { return (ESAC); }
-new      { return (NEW); }
-of      { return (OF); }
-not      { return (NOT); }
+false           {
+  cool_yylval.boolean = false;
+  return (BOOL_CONST);
+}
+
+true           {
+  cool_yylval.boolean = true;
+  return (BOOL_CONST);
+}
+
 "+"      { return ('+'); }
 "-"      { return ('-'); }
-"*"      { return ('*'); }
 "="      { return ('='); }
 "<"      { return ('<'); }
 \.      { return ('.'); }
@@ -126,11 +163,12 @@ not      { return (NOT); }
 ","      { return (','); }
 ";"      { return (';'); }
 ":"      { return (':'); }
-"("      { return ('('); }
 ")"      { return (')'); }
 "@"      { return ('@'); }
 "{"      { return ('{'); }
 "}"      { return ('}'); }
+"*"      { return ('*'); }
+"("      { return ('('); }
 
 {OBJECT_IDENTIFIER}   {
   //  cool_yylval.symbol = idtable.add_string("hello");
@@ -154,16 +192,30 @@ not      { return (NOT); }
   *  \n \t \b \f, the result is c.
   *  There are a few error conditions.
   */
-<IN_STRING>\"                               { BEGIN(INITIAL);
+<INSTRING>\"                               {
   
-  cool_yylval.symbol = stringtable.add_string(const_cast<char *>(str_or_comment.c_str()));
-  str_or_comment = "";
-  return (STR_CONST);
+  BEGIN(INITIAL); //on end quote, we are out of the string state
+  if (str_or_comment.size() > MAX_STR_CONST)
+    {
+      cool_yylval.error_msg = "String constant too long";
+      str_or_comment = "";
+      return (ERROR);
+    }
+  else if (!invalid_string_p)
+    {
+      // add the string to the string table and report it to the 
+      cool_yylval.symbol = stringtable.add_string(const_cast<char *>(str_or_comment.c_str()));
+      str_or_comment = "";
+      return (STR_CONST);
+    }
  }
 
-\"                                          { BEGIN(IN_STRING); }
+\"                                          {
+  invalid_string_p = false;
+  BEGIN(INSTRING);
+}
 
-<IN_STRING>\\[.\n]                          {
+<INSTRING>(\\.|\\\n)                          {
   char unescaped = 0;
   switch (yytext[1]) {
     //  case '\0': unput('\0') break; // pass the null character on to be handled as an error
@@ -174,17 +226,42 @@ not      { return (NOT); }
   case '\n': curr_lineno++;
   default: unescaped = yytext[1]; break;
   }
-  str_or_comment += unescaped; 
+  str_or_comment += unescaped;
 }
 
-<IN_STRING>[\0]                       {
+<INSTRING>[\0]                       {
+  invalid_string_p = true;
   cool_yylval.error_msg = "String contains null character";
   return (ERROR);
 }
-<IN_STRING>.                          { str_or_comment += yytext;}
 
-{NEWLINE} { curr_lineno++; }
+<INSTRING><<EOF>>            {
+  BEGIN(INITIAL);
+  invalid_string_p = true;
+  cool_yylval.error_msg = "EOF in string constant";
+  return (ERROR);
+ }
+
+<INSTRING>.            {
+  str_or_comment += yytext;
+ }
+
+<INSTRING>\n            {
+  /* If a string contains an unescaped newline, report that error as ‘‘Unterminated string constant’’
+     and resume lexing at the beginning of the next line—we assume the programmer simply forgot the
+     close-quote.
+  */
+  curr_lineno++; //always always increment the line count
+  cool_yylval.error_msg = "Unterminated string constant";
+  BEGIN(INITIAL);
+  return (ERROR);
+ }
+
+<INITIAL,INCOMMENT>{NEWLINE} { curr_lineno++; }
+
 {WS} { }
-. { cool_yylval.error_msg = "Unexpected character"; return (ERROR); } 
+
+. { cool_yylval.error_msg = yytext; return (ERROR); } 
 
 %%
+
