@@ -115,7 +115,7 @@ int omerrs = 0;               /* number of errors in lexing and parsing */
 %left LETPREC
 %right ASSIGN
 %left NOT
-%nonassoc LEQ LE '='
+%nonassoc LE '<' '='
 %left '+' '-'
 %left '*' '/'
 %left ISVOID
@@ -128,16 +128,36 @@ int omerrs = 0;               /* number of errors in lexing and parsing */
    Save the root of the abstract syntax tree in a global variable.
 */
 program	: class_list	{ ast_root = program($1); }
-        ;
+error {  yyclearin; yyerrok; }
+;
 
 class_list
-	: class			/* single class */
-		{ $$ = single_Classes($1);
-                  parse_results = $$; }
-	| class_list class	/* several classes */
-		{ $$ = append_Classes($1,single_Classes($2)); 
-                  parse_results = $$; }
-	;
+: class			/* single class */
+{
+  // $1 will be NULL when it encountered a parse error
+  if ($1)
+    {
+      $$ = single_Classes($1);
+      parse_results = $$;
+    }
+  else
+      $$ = NULL;
+}
+| class_list class	/* several classes */
+{
+  if ($1 && $2)
+    {
+      $$ = append_Classes($1,single_Classes($2)); 
+      parse_results = $$;
+    }
+  else if ($1)
+    $$ = $1;
+  else if ($2)
+    $$ = single_Classes($2);
+  else
+      $$ = nil_Classes();
+}
+;
 
 /* If no parent is specified, the class inherits from the Object class. */
 class	: 
@@ -146,9 +166,9 @@ CLASS TYPEID '{' feature_list '}' ';'
               stringtable.add_string(curr_filename)); }
 | CLASS TYPEID INHERITS TYPEID '{' feature_list '}' ';'
 { $$ = class_($2,$4,$6,stringtable.add_string(curr_filename)); }
-| CLASS TYPEID '{' error '}' ';' { yyclearin;}
-| CLASS error '{' feature_list '}' ';' { yyclearin;}
-| CLASS error '{' error '}' ';' { yyclearin;}
+| CLASS TYPEID '{' error '}' ';' { yyclearin; $$ = NULL; }
+| CLASS error '{' feature_list '}' ';' { yyclearin; $$ = NULL;}
+| CLASS error '{' error '}' ';' { yyclearin; $$ = NULL;}
 ;
 
 /* Feature list may be empty, but no empty features in list. */
@@ -163,7 +183,19 @@ nonempty_feature_list :
 /* single feature */
 feature ';' { $$ = single_Features($1); }
 /* many features */
-| nonempty_feature_list feature ';' { $$ = append_Features($1, single_Features($2));}
+| nonempty_feature_list feature ';' {
+  if (YYRECOVERING())
+    {
+      
+    }
+  else
+    {
+      $$ = append_Features($1, single_Features($2));
+    }
+}
+/* errors are ok as long as we eventually get a valid feature list. */
+| error nonempty_feature_list
+{ yyerrok; $$ = $2; }
 ;
 
 formal:
@@ -184,6 +216,7 @@ OBJECTID '(' method_formals ')' ':' TYPEID '{' expr '}'
 | OBJECTID ':' TYPEID { $$ = attr($1, $3, makeDefaultExpression($3)); }
 /* attribute with assignment */
 | OBJECTID ':' TYPEID ASSIGN expr { $$ = attr($1, $3, $5); }
+/*| error { yyclearin; $$ = NULL; }*/
 ;
 
 expr:
@@ -212,29 +245,37 @@ OBJECTID ASSIGN expr { $$ = assign($1, $3); }
  */
 
 | LET letvars IN expr %prec LETPREC
-{ 
-  List<Letvar> * vars = $2;
-  int num_vars = list_length(vars);
-
-  // store the next-inner expression here
-  // decrement this as we go through the list until it, using it
-  // as the next let body, until it is the outter-most expression
-  Expression inner_expr = NULL;
-                                 
-  // go through each let variable and create a new
-  // binding (let expression)
-  for (int i = num_vars-1; i >= 0; i--)
+{
+  // $2 is NULL if an error was encountered while parsing the args
+  if ($2)
     {
-      List<Letvar> * item = list_nth(vars, i);
+      List<Letvar> * vars = $2;
+      int num_vars = list_length(vars);
       
-      Expression body = inner_expr == NULL ? $4 : inner_expr;
-
-      inner_expr = let(item->hd()->id,
-                       item->hd()->type,
-                       item->hd()->expr,
-                       body);
+      // store the next-inner expression here
+      // decrement this as we go through the list until it, using it
+      // as the next let body, until it is the outter-most expression
+      Expression inner_expr = NULL;
+      
+      // go through each let variable and create a new
+      // binding (let expression)
+      for (int i = num_vars-1; i >= 0; i--)
+        {
+          List<Letvar> * item = list_nth(vars, i);
+          
+          Expression body = inner_expr == NULL ? $4 : inner_expr;
+          
+          inner_expr = let(item->hd()->id,
+                           item->hd()->type,
+                           item->hd()->expr,
+                           body);
+        }
+      $$ = inner_expr;
     }
-  $$ = inner_expr;
+  else
+    {
+      YYERROR;
+    }
 }
 
 /*
@@ -265,8 +306,8 @@ OBJECTID ASSIGN expr { $$ = assign($1, $3); }
 | '~' expr { $$ = neg($2); }
 
 /* infix < comparison */
-| expr LE expr { $$ = lt($1, $3); } 
-| expr LEQ expr { $$ = leq($1, $3); } 
+| expr '<' expr { $$ = lt($1, $3); }
+| expr LE expr { $$ = leq($1, $3); } 
 | expr '=' expr { $$ = eq($1, $3); }
 | NOT expr { $$ = comp($2); }
 
@@ -301,9 +342,9 @@ comma_delimited_exprs:
 letvar :
 OBJECTID ':' TYPEID ASSIGN expr { $$ = new Letvar($1, $3, $5); }
 | OBJECTID ':' TYPEID {$$ = new Letvar($1, $3, no_expr()); }
-| error { yyclearin; $$ = NULL; }
-
+/*| error { yyclearin; $$ = NULL; } */
 ;
+
 letvars : letvar {
   // if $1 is null there was an error in parsing
   if ($1)
