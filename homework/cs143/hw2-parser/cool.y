@@ -24,7 +24,7 @@ extern int yylex();           /*  the entry point to the lexer  */
 Expression makeDefaultExpression(Symbol ofType);
 
  struct Letvar {
-   static Letvar create (Symbol i, Symbol t, Expression e) {Letvar var; var.id=i; var.type=t; var.expr=e; return var;}
+   Letvar (Symbol i, Symbol t, Expression e) {id=i; type=t; expr=e; }
    Symbol id;
    Symbol type;
    Expression expr;
@@ -59,7 +59,7 @@ int omerrs = 0;               /* number of errors in lexing and parsing */
   Cases cases;
   Expression expression;
   Expressions expressions;
-  Letvar letvar;
+  Letvar * letvar;
   Letvars letvars;
   char *error_msg;
 }
@@ -108,6 +108,7 @@ int omerrs = 0;               /* number of errors in lexing and parsing */
 %type <case_> case_branch;
 %type <letvar>  letvar;
 %type <letvars> letvars;
+/*%type <error_msg> syntax_error; */
 
 /* Precedence declarations go here. */
 
@@ -145,6 +146,9 @@ CLASS TYPEID '{' feature_list '}' ';'
               stringtable.add_string(curr_filename)); }
 | CLASS TYPEID INHERITS TYPEID '{' feature_list '}' ';'
 { $$ = class_($2,$4,$6,stringtable.add_string(curr_filename)); }
+| CLASS TYPEID '{' error '}' ';' { yyclearin;}
+| CLASS error '{' feature_list '}' ';' { yyclearin;}
+| CLASS error '{' error '}' ';' { yyclearin;}
 ;
 
 /* Feature list may be empty, but no empty features in list. */
@@ -295,12 +299,30 @@ comma_delimited_exprs:
 ;
 
 letvar :
-OBJECTID ':' TYPEID ASSIGN expr { $$ = Letvar::create($1, $3, $5); }
-| OBJECTID ':' TYPEID {$$ = Letvar::create($1, $3, no_expr()); }
+OBJECTID ':' TYPEID ASSIGN expr { $$ = new Letvar($1, $3, $5); }
+| OBJECTID ':' TYPEID {$$ = new Letvar($1, $3, no_expr()); }
+| error { yyclearin; $$ = NULL; }
 
 ;
-letvars : letvar { $$ = new List<Letvar>(new Letvar($1)); }
-| letvar ',' letvars { $$ = new List<Letvar>(new Letvar($1), $3); }
+letvars : letvar {
+  // if $1 is null there was an error in parsing
+  if ($1)
+    $$ = new List<Letvar>($1);
+  else
+    {
+      $$ = NULL;
+    }
+}
+| letvar ',' letvars 
+{
+  if ($1)
+    $$ = new List<Letvar>($1, $3);
+  else if ($3)
+    $$ = $3;
+  else
+    $$ = NULL;
+}
+;
 
 /*
 let_term :
@@ -337,6 +359,7 @@ void yyerror(char *s)
   print_cool_token(yychar);
   cerr << endl;
   omerrs++;
+  omerrs--;
 
   if(omerrs>50) {fprintf(stdout, "More than 50 errors\n"); exit(1);}
 }
