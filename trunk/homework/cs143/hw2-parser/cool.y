@@ -18,6 +18,9 @@ extern char *curr_filename;
 void yyerror(char *s);        /*  defined below; called for each parse error */
 extern int yylex();           /*  the entry point to the lexer  */
 
+
+Expression makeDefaultExpression(Symbol ofType);
+
 /************************************************************************/
 /*                DONT CHANGE ANYTHING IN THIS SECTION                  */
 
@@ -76,7 +79,11 @@ int omerrs = 0;               /* number of errors in lexing and parsing */
 %type <class_> class
 
 /* You will want to change the following line. */
-%type <features> dummy_feature_list
+%type <features> feature_list
+%type <feature> feature
+%type <expression> expr
+%type <expressions> oneormore_expr;
+%type <expressions> comma_delimited_exprs;
 
 /* Precedence declarations go here. */
 
@@ -106,22 +113,83 @@ class	: CLASS TYPEID '{' feature_list '}' ';'
 	;
 
 /* Feature list may be empty, but no empty features in list. */
-feature_list   :
-/* single features */ feature { $$ = single_Feature(); }
-|/* many features */ feature_list feature { }
-| /* empty */ {  $$ = nil_Features(); }
+feature_list :
+/* single feature */
+feature { $$ = single_Features($1); }
+/* many features */
+| feature_list feature { $$ = append_Features($1, single_Features($2));}
+/* empty */
+| {  $$ = nil_Features(); }
 ;
 
-/* Feature list may be empty, but no empty features in list. */
-feature  :
-/* single features */  { $$ = single_Feature(); }
-|/* many features */ feature_list feature { }
-| /* empty */ {  $$ = nil_Features(); }
+feature:
+/* attribute without assignment */
+OBJECTID ':' TYPEID ';' { $$ = attr($1, $3, makeDefaultExpression($3)); }
+/* attribute with assignment */
+| OBJECTID ':' TYPEID ASSIGN expr ';' { $$ = attr($1, $3, $5); }
 ;
 
+expr:
+OBJECTID ASSIGN expr { $$ = assign($1, $3); } 
+/* static dispatch */
+| expr '@' TYPEID '.' OBJECTID '(' comma_delimited_exprs ')'
+{ $$ = static_dispatch($1, $3, $5, $7); }
+| expr '.' OBJECTID '(' comma_delimited_exprs ')'
+{ $$ = dispatch($1, $3, $5); }
+/* non-static dispatch */
+/* OBJECTID '(' comma_delimited_exprs ')'
+{ $$ =  dispatch($2, $4, $6);} */
+| IF expr THEN expr ELSE expr FI { $$ =  cond($2, $4, $6);}
+| WHILE expr LOOP expr POOL { $$ =  loop($2, $4);}
+| '{' oneormore_expr '}' { $$ =  block($2);}
+/* LET OBJECTID ':' TYPE ASSIGN expr */
+/* CASE expr OF  { $$ = comp($2); } */
+| NEW TYPEID { $$ = new_($2); }
+| ISVOID expr { $$ = isvoid($2); }
+| expr '+' expr { $$ = plus($1, $3); }
+| expr '-' expr { $$ = sub($1, $3); }
+| expr '*' expr { $$ = mul($1, $3); }
+| expr '/' expr { $$ = divide($1, $3); }
+| '~' expr { $$ = neg($2); }
+| expr '<' expr { $$ = lt($1, $3); } 
+| expr LE expr { $$ = leq($1, $3); } 
+| expr '=' expr { $$ = eq($1, $3); }
+| NOT expr { $$ = comp($2); }
+| '(' expr ')' { $$ = $2; }
+| OBJECTID { $$ = object($1); }
+| INT_CONST { $$ = int_const($1);  }
+| STR_CONST { $$ = string_const($1); }
+| BOOL_CONST { $$ = bool_const($1); }
+;
+
+oneormore_expr :
+expr ';' { $$ = single_Expressions($1); }
+| oneormore_expr expr ';' { $$ = append_Expressions($1, single_Expressions($2)); }
+
+comma_delimited_exprs:
+expr { $$ = single_Expressions($1); }
+| comma_delimited_exprs ',' expr { $$ = append_Expressions($1, single_Expressions($3)); }
+|  {$$ = nil_Expressions(); }
+;
 
 /* end of grammar */
 %%
+
+/* makes a new expression with the correct default value for the given type. */
+Expression makeDefaultExpression(Symbol ofType)
+{
+  if (strcmp(ofType->get_string(), "Bool") == 0)
+    return bool_const(false);
+
+  else if (strcmp(ofType->get_string(), "Int") == 0)
+    return int_const(inttable.add_string("0"));
+
+  else if (strcmp(ofType->get_string(), "String") == 0)
+    return string_const(stringtable.add_string(""));
+
+  else
+    return no_expr();
+}
 
 /* This function is called automatically when Bison detects a parse error. */
 void yyerror(char *s)
