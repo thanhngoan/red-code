@@ -9,6 +9,8 @@
 #include "stringtab.h"
 #include "utilities.h"
 
+#include <list>
+
 #ifdef yylineno
 #undef yylineno
 #endif //yylineno
@@ -21,8 +23,21 @@ extern int yylex();           /*  the entry point to the lexer  */
 
 Expression makeDefaultExpression(Symbol ofType);
 
+ struct Letvar {
+   static Letvar create (Symbol i, Symbol t, Expression e) {Letvar var; var.id=i; var.type=t; var.expr=e; return var;}
+   Symbol id;
+   Symbol type;
+   Expression expr;
+ };
+
+template <class T>  List<T> * list_nth(List<T> *l, int index);
+
+
+typedef List<Letvar> * Letvars;
+
 /************************************************************************/
 /*                DONT CHANGE ANYTHING IN THIS SECTION                  */
+
 
 Program ast_root;	      /* the result of the parse  */
 Classes parse_results;        /* for use in semantic analysis */
@@ -44,6 +59,8 @@ int omerrs = 0;               /* number of errors in lexing and parsing */
   Cases cases;
   Expression expression;
   Expressions expressions;
+  Letvar letvar;
+  Letvars letvars;
   char *error_msg;
 }
 
@@ -80,13 +97,30 @@ int omerrs = 0;               /* number of errors in lexing and parsing */
 
 /* You will want to change the following line. */
 %type <features> feature_list
+%type <features> nonempty_feature_list
 %type <feature> feature
 %type <expression> expr
 %type <expressions> oneormore_expr;
 %type <expressions> comma_delimited_exprs;
+%type <formals> method_formals;
+%type <formal> formal;
+%type <cases> case_branches;
+%type <case_> case_branch;
+%type <letvar>  letvar;
+%type <letvars> letvars;
 
 /* Precedence declarations go here. */
 
+%left LETPREC
+%right ASSIGN
+%left NOT
+%nonassoc LEQ LE '='
+%left '+' '-'
+%left '*' '/'
+%left ISVOID
+%left '~'
+%left '@'
+%left '.'
 
 %%
 /* 
@@ -105,28 +139,47 @@ class_list
 	;
 
 /* If no parent is specified, the class inherits from the Object class. */
-class	: CLASS TYPEID '{' feature_list '}' ';'
-		{ $$ = class_($2,idtable.add_string("Object"),$4,
-			      stringtable.add_string(curr_filename)); }
-	| CLASS TYPEID INHERITS TYPEID '{' feature_list '}' ';'
-		{ $$ = class_($2,$4,$6,stringtable.add_string(curr_filename)); }
-	;
+class	: 
+CLASS TYPEID '{' feature_list '}' ';'
+{ $$ = class_($2,idtable.add_string("Object"),$4,
+              stringtable.add_string(curr_filename)); }
+| CLASS TYPEID INHERITS TYPEID '{' feature_list '}' ';'
+{ $$ = class_($2,$4,$6,stringtable.add_string(curr_filename)); }
+;
 
 /* Feature list may be empty, but no empty features in list. */
 feature_list :
-/* single feature */
-feature { $$ = single_Features($1); }
-/* many features */
-| feature_list feature { $$ = append_Features($1, single_Features($2));}
+/* > 0 features */
+nonempty_feature_list { $$ = $1; }
 /* empty */
 | {  $$ = nil_Features(); }
 ;
 
+nonempty_feature_list :
+/* single feature */
+feature ';' { $$ = single_Features($1); }
+/* many features */
+| nonempty_feature_list feature ';' { $$ = append_Features($1, single_Features($2));}
+;
+
+formal:
+OBJECTID ':' TYPEID { $$ = formal($1, $3); }
+;
+
+method_formals:
+formal { $$ = single_Formals($1); }
+| method_formals ',' formal { $$ = append_Formals($1, single_Formals($3));}
+| { $$ = nil_Formals(); }
+;
+
 feature:
+/* method declaration */
+OBJECTID '(' method_formals ')' ':' TYPEID '{' expr '}'
+{ $$ = method($1, $3, $6, $8); }
 /* attribute without assignment */
-OBJECTID ':' TYPEID ';' { $$ = attr($1, $3, makeDefaultExpression($3)); }
+| OBJECTID ':' TYPEID { $$ = attr($1, $3, makeDefaultExpression($3)); }
 /* attribute with assignment */
-| OBJECTID ':' TYPEID ASSIGN expr ';' { $$ = attr($1, $3, $5); }
+| OBJECTID ':' TYPEID ASSIGN expr { $$ = attr($1, $3, $5); }
 ;
 
 expr:
@@ -134,43 +187,126 @@ OBJECTID ASSIGN expr { $$ = assign($1, $3); }
 /* static dispatch */
 | expr '@' TYPEID '.' OBJECTID '(' comma_delimited_exprs ')'
 { $$ = static_dispatch($1, $3, $5, $7); }
+/* non-static dispatch */
 | expr '.' OBJECTID '(' comma_delimited_exprs ')'
 { $$ = dispatch($1, $3, $5); }
-/* non-static dispatch */
-/* OBJECTID '(' comma_delimited_exprs ')'
-{ $$ =  dispatch($2, $4, $6);} */
+/* omitted 'self' dispatch */
+| OBJECTID '(' comma_delimited_exprs ')'
+{ $$ =  dispatch(object(idtable.add_string("self")), $1, $3);}
+
+/* if then else fi */
 | IF expr THEN expr ELSE expr FI { $$ =  cond($2, $4, $6);}
+/* loop */
 | WHILE expr LOOP expr POOL { $$ =  loop($2, $4);}
+
+/* blocks */
 | '{' oneormore_expr '}' { $$ =  block($2);}
-/* LET OBJECTID ':' TYPE ASSIGN expr */
-/* CASE expr OF  { $$ = comp($2); } */
+
+/* let
+| LET OBJECTID ':' TYPE ASSIGN expr  IN expr
+{ $$ = LET $1 ':' $4 ASSIGN $6 IN }
+ */
+
+| LET letvars IN expr %prec LETPREC
+{ 
+  List<Letvar> * vars = $2;
+  int num_vars = list_length(vars);
+
+  // store the next-inner expression here
+  // decrement this as we go through the list until it, using it
+  // as the next let body, until it is the outter-most expression
+  Expression inner_expr = NULL;
+                                 
+  // go through each let variable and create a new
+  // binding (let expression)
+  for (int i = num_vars-1; i >= 0; i--)
+    {
+      List<Letvar> * item = list_nth(vars, i);
+      
+      Expression body = inner_expr == NULL ? $4 : inner_expr;
+
+      inner_expr = let(item->hd()->id,
+                       item->hd()->type,
+                       item->hd()->expr,
+                       body);
+    }
+  $$ = inner_expr;
+}
+
+/*
+
+| LET OBJECTID ':' TYPEID IN expr
+{ $$ = let($2, $4, no_expr(), $6); }
+
+
+| LET OBJECTID ':' TYPE ASSIGN expr 
+| LET OBJECTID ':' TYPE 
+ */
+
+/* case */
+| CASE expr OF case_branches ESAC
+{ $$ = typcase($2, $4); }
+
+/* special prefix forms */
 | NEW TYPEID { $$ = new_($2); }
 | ISVOID expr { $$ = isvoid($2); }
+
+/* infix + arithmetic */
 | expr '+' expr { $$ = plus($1, $3); }
 | expr '-' expr { $$ = sub($1, $3); }
 | expr '*' expr { $$ = mul($1, $3); }
 | expr '/' expr { $$ = divide($1, $3); }
+
+/* ~negation */
 | '~' expr { $$ = neg($2); }
-| expr '<' expr { $$ = lt($1, $3); } 
-| expr LE expr { $$ = leq($1, $3); } 
+
+/* infix < comparison */
+| expr LE expr { $$ = lt($1, $3); } 
+| expr LEQ expr { $$ = leq($1, $3); } 
 | expr '=' expr { $$ = eq($1, $3); }
 | NOT expr { $$ = comp($2); }
+
+/* ((((grouping)))) */
 | '(' expr ')' { $$ = $2; }
+
+/* literals */
 | OBJECTID { $$ = object($1); }
 | INT_CONST { $$ = int_const($1);  }
 | STR_CONST { $$ = string_const($1); }
 | BOOL_CONST { $$ = bool_const($1); }
 ;
 
+case_branches : case_branch { $$ = single_Cases($1); }
+| case_branches case_branch { $$ = append_Cases($1, single_Cases($2));}
+;
+
+case_branch : OBJECTID ':' TYPEID DARROW expr ';'
+{ $$ = branch($1, $3, $5); }
+
 oneormore_expr :
 expr ';' { $$ = single_Expressions($1); }
 | oneormore_expr expr ';' { $$ = append_Expressions($1, single_Expressions($2)); }
+;
 
 comma_delimited_exprs:
-expr { $$ = single_Expressions($1); }
-| comma_delimited_exprs ',' expr { $$ = append_Expressions($1, single_Expressions($3)); }
+ expr { $$ = single_Expressions($1); }
+ | comma_delimited_exprs ',' expr { $$ = append_Expressions($1, single_Expressions($3)); }
 |  {$$ = nil_Expressions(); }
 ;
+
+letvar :
+OBJECTID ':' TYPEID ASSIGN expr { $$ = Letvar::create($1, $3, $5); }
+| OBJECTID ':' TYPEID {$$ = Letvar::create($1, $3, no_expr()); }
+
+;
+letvars : letvar { $$ = new List<Letvar>(new Letvar($1)); }
+| letvar ',' letvars { $$ = new List<Letvar>(new Letvar($1), $3); }
+
+/*
+let_term :
+OBJECTID ':' TYPEID ASSIGN expr { $$ = l }
+;
+*/
 
 /* end of grammar */
 %%
@@ -203,4 +339,16 @@ void yyerror(char *s)
   omerrs++;
 
   if(omerrs>50) {fprintf(stdout, "More than 50 errors\n"); exit(1);}
+}
+
+
+//gets the nth item from the list
+template <class T>
+  List<T> * list_nth(List<T> *l, int index)
+{
+  int i = 0;
+  for (; l != NULL; l = l->tl())
+    if (i++ == index)
+      return l;
+  return NULL;
 }
