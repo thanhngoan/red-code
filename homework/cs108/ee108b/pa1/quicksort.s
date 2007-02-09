@@ -251,9 +251,8 @@ lw      $s2, 0($a0)       #pivot = array[0]
 addiu   $s0, $zero, 1  #lh = 1
 addiu   $s1, $a1, -1   #rh = n - 1
 
-move $v0, $zero
 PartLoop:
-
+j PartSubLoopTest1
   PartSubLoopBody1:
   addiu $s1, $s1, -1 #rh--
 
@@ -265,8 +264,7 @@ addu $t7, $t7, $a0
 lw $t7, 0($t7) # array[rh] is in $t7
 
 addiu $t7, $t7, 1
-slt $t7, $s2, $t7 # t7 = array[rh] < pivot
-#slt $t7, $t7, $s1 # t7 = array[rh] < pivot
+slt $t7, $s2, $t7 # t7 = array[rh] >= pivot  SAME AS t7 =  pivot < array[rh] + 1
 
 and $t6, $t6, $t7 # lh < rh && array[rh] >= pivot
 bne $t6, $zero, PartSubLoopBody1 # branch on pass
@@ -276,7 +274,7 @@ j PartSubLoopTest2
 PartSubLoopBody2:
     addiu $s0, $s0, 1 #lh++
 
-  PartSubLoopTest2:
+PartSubLoopTest2:
   slt $t6, $s0, $s1 # lh < rh is in t6
 
 sll $t7, $s0, 2    # lh*4 for int offset
@@ -306,18 +304,13 @@ j PartLoop
   AfterPartLoop:
   sll $t0, $s0, 2     # lh*4 for int offset
 addu  $t0, $t0, $a0 # address of array[lh] is in t1
-lw $t0, 0($t0) # t0 =  array[lh]
+
+lw $t1, 0($t0) # t1 =  array[lh], t0= &array[lh]
 
   move $v0, $zero
-bge $t0, $s2, PartitionReturn # return 0 if array[lh] >= pivot
+bge $t1, $s2, PartitionReturn # return 0 if array[lh] >= pivot
 
-sll $t0, $s0, 2     # lh*4 for int offset
-addu  $t0, $t0, $a0 # address of array[lh] is in t1
-sll $t1, $s1, 2     # lh*4 for int offset
-addu  $t1, $t1, $a0 # address of array[rh] is in t1
-
-lw $t0, 0($t0) # array[0] = array[lh]
-sw $t0, 0($a0) 
+sw $t1, 0($a0) 
 sw $s2, 0($t0) # array[lh] = pivot
 
 move $v0, $s0 #return lh
