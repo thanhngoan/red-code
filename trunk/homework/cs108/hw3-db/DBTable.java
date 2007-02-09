@@ -41,8 +41,7 @@ public class DBTable {
 		while ((line = data.readLine()) != null)
 		{
 			records.add(new DBRecord(line));
-		}
-		dbgPrint();				
+		}			
 	}
 	
 	/**

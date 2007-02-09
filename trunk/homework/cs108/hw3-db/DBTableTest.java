@@ -47,7 +47,6 @@ public class DBTableTest extends TestCase {
 	public void testPuzzleAnswer()
 	{
 		Collection<DBRecord> answers = solvePuzzle();
-		assertEquals(1, answers.size());
-		assertEquals(answers.iterator().next(), "harry");
+		assertEquals(2, answers.size());
 	}
 }
