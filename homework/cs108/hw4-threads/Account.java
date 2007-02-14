@@ -8,11 +8,7 @@ public class Account {
 	private int id;
 	private int balance;
 	private int transactions;
-	
-	// It may work out to be handy for the account to
-	// have a pointer to its Bank.
-	// (a suggestion, not a requirement)
-	private Bank bank;  
+	protected Bank bank;
 	
 	public Account(Bank bank, int id, int balance) {
 		this.bank = bank;
@@ -21,26 +17,37 @@ public class Account {
 		transactions = 0;  
 	}
 	
-	void transferFunds(Account into, int amount)
+	public int getBalance() { return balance; }
+	
+	public String toString() { 
+		return "acct:" + id + " bal: " + balance + " trans:" + transactions;
+	}
+	
+
+	/**
+	 * Enacts the given transaction as the "from" bank account.
+	 * @param trans transaction to enact
+	 * @return
+	 */
+	void enactTransactionAsGiver(Transaction trans)
 	{
+		int amount = trans.amount;
+		Account into = bank.findAccountById(trans.to);
 		/* this could deadlock:
-		synchronized (this)
-		{
-			synchronized (into)
-			{
-				
-			}
-		}
+		synchronized (this) { synchronized (into) { } }
 		*/
 		synchronized (this)
 		{
+			this.transactions++;
 			this.balance -= amount;
+			if (bank.recordingBadTransactions() && balance < bank.getLimit()) // callback for bad transaction
+				bank.addBad(trans);
 		}
 		synchronized (into)
 		{
+			into.transactions++;
 			into.balance += amount;
 		}
 	}
-	 
 	
 }

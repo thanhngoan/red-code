@@ -4,6 +4,8 @@
 */
 
 import java.security.*;
+import java.util.Collection;
+import java.util.LinkedList;
 
 public class Cracker {
 	// Array of chars used to produce strings
@@ -40,9 +42,136 @@ public class Cracker {
 		return result;
 	}
 	
+	public class CrackerWorker extends Thread
+	{
+		int maxLength;
+		String[] prefixes;
+		MessageDigest digester;
+		CrackerWorker(String[] prefixes, int maxlength)
+		{
+			super();
+			this.prefixes = prefixes;
+			this.maxLength = maxlength;
+			try {
+				digester = MessageDigest.getInstance("SHA");
+			} catch (NoSuchAlgorithmException e) {
+				e.printStackTrace();
+			}
+		}
+		
+		public byte[] computeDigestForString(String string)
+		{
+			digester.reset();
+			digester.update(string.getBytes());
+			return digester.digest();
+		}
+		
+		public void runUntilDepth0(String prefix, int depth, byte[] soughtDigest, boolean printMode)
+		{
+			byte[] digest = computeDigestForString(prefix);
+			if (soughtDigest != null && MessageDigest.isEqual(digest, soughtDigest))
+				System.out.println("match:" + prefix + " " + hexToString(digest));
+			
+			if (printMode)
+				System.out.println(prefix + " " + hexToString(digest));
+			
+			if (depth == 0)
+				return;
+			
+			for (int i=0; i < CHARS.length; i++)
+				runUntilDepth0(prefix + CHARS[i], depth - 1, soughtDigest, printMode);
+		}
+		
+		public void run()
+		{
+			for (int i=0; i < prefixes.length; i++)
+			{
+				int startDepth = maxLength - prefixes[i].length();
+				runUntilDepth0(prefixes[i], startDepth, soughtDigest, printMode);
+			}
+		}
+	}
 	
+
+	protected int inputLength;
+	protected boolean printMode;
+	protected byte[] soughtDigest;
+	protected Collection<CrackerWorker> workers;
+	/*
+	Cracker(boolean printMode, byte[] soughtDigest, int inputLength)
+	{
+		setConfiguration(printMode, soughtDigest, inputLength);
+	}
+	*/
 	
-	public static void main(String[] args) {
+	public void setConfiguration(boolean printMode, byte[] soughtDigest, int inputLength)
+	{
+		this.soughtDigest = soughtDigest;
+		this.printMode = printMode;
+		this.inputLength = inputLength;
+	}
+	
+	protected String[][] partitionPrefixes(int numPartitions)
+	{
+		String[][] partitions = new String[numPartitions][];
+		int[] indexes = createPartitionIndexes(numPartitions, CHARS.length);
+		for (int i=0; i < numPartitions; i++)
+		{
+			int span = indexes[i + 1] - indexes[i];
+			String[] prefixes = new String[span];
+			for (int j = 0; j < prefixes.length; j++)
+				prefixes[j] = Character.toString(CHARS[indexes[i] + j]);
+			partitions[i] = prefixes;
+		}
+		return partitions;
+	}
+
+	/**
+	 * Returns a set of indexes into an array of length 'length' that will
+	 * evenly partition the array into numPartitions partitions.
+	 * @param numPartitions
+	 * @param length
+	 * @return
+	 */
+	protected static int[] createPartitionIndexes(int numPartitions, int length)
+	{
+		int[] indexes = new int[numPartitions + 1];
+		int lowerBoundPartitionSize = length / numPartitions;
+		int remainder = length % numPartitions; // try to get this down to 0
+		int currentIndexPosition = 0;
+		indexes[0] = 0;
+		for (int i=1; i < indexes.length; i++)
+		{
+			currentIndexPosition += lowerBoundPartitionSize;
+			if (remainder != 0)
+			{
+				++currentIndexPosition;
+				--remainder;
+			}
+			indexes[i]  = currentIndexPosition;
+		}
+		return indexes;
+	}
+	
+	public void runThreads(int numThreads) throws InterruptedException
+	{
+		workers = new LinkedList<CrackerWorker>();
+		String[][] prefixes = partitionPrefixes(numThreads);
+		for (int i=0; i < numThreads; i++)
+		{
+			CrackerWorker worker = new CrackerWorker(prefixes[i], inputLength);
+			workers.add(worker);
+			worker.start();
+		}
+		
+		for (CrackerWorker worker : workers)
+		{
+			worker.join();
+		}
+		workers = null;
+	}
+	
+	public static void main(String[] args) throws InterruptedException {
 		if (args.length < 2) {
 			System.out.println("Args: target length [workers]");
 			System.exit(1);
@@ -50,13 +179,19 @@ public class Cracker {
 		// args: targ len [num]
 		String targ = args[0];
 		int len = Integer.parseInt(args[1]);
-		int num = 1;
+		int numWorkers = 1;
 		if (args.length>2) {
-			num = Integer.parseInt(args[2]);
+			numWorkers = Integer.parseInt(args[2]);
 		}
+		boolean printMode = targ.equalsIgnoreCase("print");
+		byte[] soughtDigest = printMode ? null : hexToArray(targ);
+		Cracker cracker = new Cracker();
+		cracker.setConfiguration(printMode, soughtDigest, len);
+		cracker.runThreads(numWorkers);
 		// a! 34800e15707fae815d7c90d49de44aca97e2d759
 		// xyz 66b27417d37e024c46526c2f6d358a754fc552f3
 		
 		// YOUR CODE HERE
 	}
+	
 }

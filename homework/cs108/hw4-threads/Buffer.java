@@ -61,9 +61,14 @@ public class Buffer {
 	 * @param transaction transaction to add
 	 * @throws InterruptedException 
 	 */
-	public void add(Transaction transaction) throws InterruptedException
+	public void add(Transaction transaction)
 	{
-		canAdd.acquire();
+		try {
+			canAdd.acquire();
+		} catch (InterruptedException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 		synchronized (this) //avoid race conditions
 		{
 			storageCount++;
