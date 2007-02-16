@@ -9,6 +9,10 @@ import javax.swing.*;
 import java.awt.event.*;
 
 public class JCount extends JPanel {
+	/**
+	 * 
+	 */
+	private static final long serialVersionUID = 6211908550939728613L;
 	JTextField textfield;
 	JLabel label;
 	JButton startButton;
@@ -23,7 +27,8 @@ public class JCount extends JPanel {
 			{
 				++count;
 				++i;
-				if ((i % 10000) == 0  && 
+				//if ((i % 10000) == 0  &&
+				if ((count % 10000) == 0  &&
 					!isInterrupted())
 				{
 					label.setText(Integer.toString(count));

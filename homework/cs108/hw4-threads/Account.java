@@ -38,9 +38,12 @@ public class Account {
 		*/
 		synchronized (this)
 		{
+			int newBalance = balance - amount;
+			boolean badtrans = this.balance >= bank.getLimit() && newBalance < bank.getLimit();
+			
 			this.transactions++;
-			this.balance -= amount;
-			if (bank.recordingBadTransactions() && balance < bank.getLimit()) // callback for bad transaction
+			this.balance = newBalance;
+			if (bank.recordingBadTransactions() && badtrans) // callback for bad transaction
 				bank.addBad(trans);
 		}
 		synchronized (into)
