@@ -6,13 +6,17 @@ import java.util.Date;
 import javax.swing.*;
 
 public class WebWorker extends Thread {
+	public final static int SLEEP_TIME = 300;
+	public static enum ErrorState { OK, INTERRUPTED, ERROR };
 	
 	public class Status {
 		protected String description;
 		protected int totalBytes;
 		protected int downloadedBytes;
+		protected Date timeStart;
+		protected Date timeEnd;
 		protected ErrorState errorState;
-		public static enum ErrorState { OK, INTERRUPTED, IOERROR, ERROR };
+		protected boolean finished;
 		/**
 		 * 
 		 * @return number between 0 and 1 indicating the percentage of the download
@@ -20,11 +24,33 @@ public class WebWorker extends Thread {
 		 */
 		public float getCompletionRatio()
 		{
-			return (float)downloadedBytes / (float)totalBytes;
+			if (totalBytes > 0)
+			{
+				return (float)downloadedBytes / (float)totalBytes;
+			}
+			else
+			{
+				if (finished)
+					return 1;
+				else
+					return 0;
+			}
+		}
+		protected void setFinished()
+		{
+			finished = true;
+			timeEnd = new Date();
+			long elapsedMilliseconds = timeEnd.getTime() - timeStart.getTime();
+			String formattedTimeEnd = new SimpleDateFormat("h:mm").format(timeEnd);
+			description =  formattedTimeEnd + " " + elapsedMilliseconds + "ms "
+				           + downloadedBytes + " bytes";
 		}
 		public String toString()
 		{
+			return description;
 		}
+		public boolean getWasInterrupted() { return errorState == ErrorState.INTERRUPTED; }
+		public boolean getEncounteredError() { return errorState == ErrorState.ERROR; }
 	}
 	
 	protected String url;
@@ -37,6 +63,8 @@ public class WebWorker extends Thread {
 		this.row = row;
 		this.frame = frame;
 		this.url = url;
+		downloadStatus = new Status();
+		
 	}
 	
 	public void run()
@@ -46,14 +74,14 @@ public class WebWorker extends Thread {
 	
 	protected int getTimeout() { return 5000; }
  	public void download(String urlString) {
- 		String status = "default status";
 		InputStream input = null;
 		StringBuilder contents = null;
 		try {
-			Date timeStart = new Date();
+			downloadStatus.timeStart = new Date();
+			downloadStatus.errorState = ErrorState.OK;
 			URL url = new URL(urlString);
 			URLConnection connection = url.openConnection();
-			int sizeOfContent = connection.getContentLength();
+			downloadStatus.totalBytes = connection.getContentLength();
 		
 			// Set connect() to throw an IOException
 			// if connection does not succeed in this many msecs.
@@ -69,41 +97,46 @@ public class WebWorker extends Thread {
 			contents = new StringBuilder(1000);
 			while ((len = reader.read(array, 0, array.length)) > 0) {
 				contents.append(array, 0, len);
+				downloadStatus.downloadedBytes = contents.length();
+				frame.updateStatus(row, downloadStatus);
 				
-				Thread.sleep(100);
+				Thread.sleep(SLEEP_TIME);
 				if (isInterrupted())
 					throw new InterruptedException();
 			}
 			
 			// Successful download if we get here
-			int byteCount = contents.length();
-			Date timeEnd = new Date();
-			long elapsedMilliseconds = timeEnd.getTime() - timeStart.getTime();
-			String formattedTimeEnd = new SimpleDateFormat("h:mm").format(timeEnd);
-			status = formattedTimeEnd + " " + elapsedMilliseconds + "ms "
-				+ byteCount + " bytes";
+			downloadStatus.setFinished();
 		
 			frame.registerDownloaderCeased(this, true);
 			
 		}
 		// Otherwise control jumps to a catch...
 		catch(MalformedURLException ignored) {
+			downloadStatus.errorState = ErrorState.ERROR;
+			downloadStatus.description = "Malformed URL";
 			frame.registerDownloaderCeased(this, false);
-			status = "Malformed URL";
 		}
 		catch(IOException ignored) {
+			downloadStatus.errorState = ErrorState.ERROR;
+			downloadStatus.description  = "err, io exception";
 			frame.registerDownloaderCeased(this, false);
-			status = "err, io exception";
 		}
 		catch(InterruptedException exception) {
+			downloadStatus.errorState = ErrorState.INTERRUPTED;
+			downloadStatus.description = "interrupted";
 			frame.registerDownloaderCeased(this, false);
-			status = "interrupted";
-			// TODO: is there anything I really need to put here? YOUR CODE HERE
+		}
+		catch (OutOfMemoryError exception)
+		{
+			downloadStatus.errorState = ErrorState.ERROR;
+			downloadStatus.description  = "Out of memory.  Large download?";
+			frame.registerDownloaderCeased(this, false);
 		}
 		// "finally" clause, to close the input stream
 		// in any case
 		finally {
-			frame.setStatus(row, status);
+			frame.updateStatus(row, downloadStatus);
 			try{
 				if (input != null) input.close();
 			}

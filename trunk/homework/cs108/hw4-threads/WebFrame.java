@@ -1,3 +1,5 @@
+import java.awt.Color;
+import java.awt.Component;
 import java.awt.Dimension;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
@@ -8,12 +10,14 @@ import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.Collection;
+import java.util.Date;
 import java.util.LinkedList;
 import java.util.Vector;
 import java.util.concurrent.Semaphore;
 
 import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
+import javax.swing.table.TableCellRenderer;
 
 
 public class WebFrame extends JFrame {
@@ -52,14 +56,14 @@ public class WebFrame extends JFrame {
 		table = new JTable(
 				tableModel = 
 					new DefaultTableModel(
-						new String[] { "url", "status"},
+						new String[] { "url", "status", "completion"},
 						0));
 		table.setAutoResizeMode(JTable.AUTO_RESIZE_ALL_COLUMNS);
 		JScrollPane scrollpane = new JScrollPane(table);
 		scrollpane.setPreferredSize(new Dimension(600, 300));
 		add(scrollpane);
-		
-		tableModel.setColumnIdentifiers( new String[]{ "url", "status"});
+		tableModel.setColumnIdentifiers( new String[]{ "url", "status", "completion"});
+		table.getColumnModel().getColumn(2).setCellRenderer(createProgressCellRenderer());
 		add(singleFetchButton = new JButton("Single Thread Fetch"));
 		add(concurrentFetchButton = new JButton("Concurrent Fetch"));
 		add(maxThreadsField = new JTextField("4"));
@@ -72,6 +76,50 @@ public class WebFrame extends JFrame {
 		stopButton.setEnabled(true);
 		
 		initListeners();
+	}
+	
+	/**
+	 * Renders a progress bar cell for a currently completing download.
+	 * @author red
+	 *
+	 */
+	protected class DownloadProgressCellRenderer implements TableCellRenderer
+	{
+		public Component getTableCellRendererComponent
+		(JTable table, Object value, boolean isSelected, boolean hasFocus, int row, int column) {
+			
+			JProgressBar comp = new JProgressBar();
+			WebWorker.Status status = (WebWorker.Status)value;
+			if (status != null)
+			{
+				comp.setStringPainted(true);
+				Integer percentComplete = new Integer(Math.round(status.getCompletionRatio() * 100));
+				if (status.getEncounteredError() || status.getWasInterrupted())
+				{
+					comp.setString("error");
+				}
+				else
+				{
+					comp.setString(null);
+					comp.setValue(percentComplete);
+				}
+			}
+			else
+			{
+				comp.setStringPainted(false);
+			}
+			return comp;
+		}
+	}
+	
+	protected TableCellRenderer createProgressCellRenderer()
+	{
+		/**
+		 * This is a table cell renderer for displaying progress bars.
+		 * @author red
+		 *
+		 */
+		return new DownloadProgressCellRenderer();
 	}
 
 	protected void initListeners() {
@@ -114,7 +162,7 @@ public class WebFrame extends JFrame {
 	public void registerDownloaderCeased(WebWorker worker, boolean successful)
 	{
 		setRunningCount(downloadsRunningCount-1);
-		if (successful)
+		if (successful || !successful)
 			setCompletedCount(downloadsCompletedCount+1);
 	}
 
@@ -137,6 +185,8 @@ public class WebFrame extends JFrame {
 		downloadsCompletedCount = c;
 		completedLabel.setText("Completed:" + downloadsCompletedCount);
 		progressBar.setValue((int) (100 * downloadsCompletedCount / getDownloadCount()));
+		progressBar.setStringPainted(true);
+		progressBar.setString( downloadsCompletedCount + "/" + getDownloadCount() );
 	}
 	
 	/**
@@ -178,6 +228,7 @@ public class WebFrame extends JFrame {
 			}
 			
 			public void run() {
+				Date timeStartDownload = new Date();
 				for (int row=0; row < tableModel.getRowCount(); row++)
 				{
 					try {
@@ -200,15 +251,19 @@ public class WebFrame extends JFrame {
 					} catch (InterruptedException e) {
 						handleInterrupt();
 					}
+				Date timeEndedDownload = new Date();
+				double timeElapsed = (timeEndedDownload.getTime() - timeStartDownload.getTime()) / 1000.0;
+				elapsedLabel.setText("Elapsed:" + timeElapsed + "s");
 				enterIdleMode();
 			}
 		};
 		launcher.start();
 	}
 	
-	public void setStatus(int rowNum, String status)
+	public void updateStatus(int rowNum, WebWorker.Status status)
 	{
-		tableModel.setValueAt(status, rowNum, 1);
+		tableModel.setValueAt(status.toString(), rowNum, 1);
+		tableModel.setValueAt(status, rowNum, 2);
 	}
 
 	protected void enterIdleMode()
@@ -223,21 +278,30 @@ public class WebFrame extends JFrame {
 	 * @param filename
 	 * @throws IOException
 	 */
-	public void loadLinksFile(String filename) throws IOException
+	public void loadLinksFile(String filename)
 	{
-		InputStreamReader fin = new InputStreamReader(new FileInputStream(filename));
-		BufferedReader buff = new BufferedReader(fin);
-		String link;
-		synchronized (tableModel)
-		{
-			int rowIndex = tableModel.getRowCount() - 1;
-			while ((link =  buff.readLine()) != null)
+		InputStreamReader fin;
+		try {
+			fin = new InputStreamReader(new FileInputStream(filename));
+			BufferedReader buff = new BufferedReader(fin);
+			String link;
+			synchronized (tableModel)
 			{
-				Vector<String> rowData = new Vector<String>();
-				rowData.add(link);
-				tableModel.addRow(rowData);
-				rowIndex++;
+				int rowIndex = tableModel.getRowCount() - 1;
+				while ((link =  buff.readLine()) != null)
+				{
+					Vector<Object> rowData = new Vector<Object>();
+					rowData.add(link);
+					rowData.add("");
+					rowData.add(null);
+					tableModel.addRow(rowData);
+					rowIndex++;
+				}
 			}
+		} catch (FileNotFoundException e) {
+			System.out.println(e);
+		} catch (IOException e) {
+			System.out.println("Error parsing input file.");
 		}
 	}
 	
@@ -248,7 +312,7 @@ public class WebFrame extends JFrame {
 		frame.pack();
 		frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 		frame.setVisible(true);
-		frame.loadLinksFile("links2.txt");
+		frame.loadLinksFile("links.txt");
 	}
 	
 }
