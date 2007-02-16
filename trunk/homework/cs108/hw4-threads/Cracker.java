@@ -12,7 +12,7 @@ public class Cracker {
 	public static final char[] CHARS = "abcdefghijklmnopqrstuvwxyz0123456789.,-!".toCharArray();
 	
 	
-	/*
+	/**
 	 Given a byte[] array, produces a hex String,
 	 such as "234a6f". with 2 chars for each byte in the array.
 	 (provided code)
@@ -28,7 +28,7 @@ public class Cracker {
 		return buff.toString();
 	}
 	
-	/*
+	/**
 	 Given a string of hex byte values such as "24a26f", creates
 	 a byte[] array of those values, one byte value -128..127
 	 for each 2 chars.
@@ -42,11 +42,23 @@ public class Cracker {
 		return result;
 	}
 	
+	/**
+	 * Thread class responsible for cracking things and printing possibilities.
+	 */
 	public class CrackerWorker extends Thread
 	{
 		int maxLength;
 		String[] prefixes;
 		MessageDigest digester;
+		
+		/**
+		 * Creates a CrackerWorker that will work with the provided array of prefixes.
+		 * This is a slightly more flexible than passing in a range of characters,
+		 * though of course not the most mathematical.  Elegence is of course
+		 * not the prime factor here, since we are performing a brute force search.
+		 * @param prefixes
+		 * @param maxlength max length of input strings to try
+		 */
 		CrackerWorker(String[] prefixes, int maxlength)
 		{
 			super();
@@ -59,6 +71,10 @@ public class Cracker {
 			}
 		}
 		
+		/**
+		 * @param string
+		 * @return a SHA1 digest for the given string
+		 */
 		public byte[] computeDigestForString(String string)
 		{
 			digester.reset();
@@ -66,11 +82,22 @@ public class Cracker {
 			return digester.digest();
 		}
 		
+		/**
+		 * Performs a depth-first recursive search for over inputs up to length
+		 * prefix.length + depth for a SHA1 digest that matches soughtDigest.
+		 * @param prefix prefix for inputs to test
+		 * @param depth maximum number of characters to append onto prefix
+		 * @param soughtDigest sought SHA1 digest
+		 * @param printMode true if we should print out results as we go
+		 */
 		public void runUntilDepth0(String prefix, int depth, byte[] soughtDigest, boolean printMode)
 		{
 			byte[] digest = computeDigestForString(prefix);
 			if (soughtDigest != null && MessageDigest.isEqual(digest, soughtDigest))
+			{
 				System.out.println("match:" + prefix + " " + hexToString(digest));
+				recordMatchingInput(prefix);
+			}
 			
 			if (printMode)
 				System.out.println(prefix + " " + hexToString(digest));
@@ -97,12 +124,22 @@ public class Cracker {
 	protected boolean printMode;
 	protected byte[] soughtDigest;
 	protected Collection<CrackerWorker> workers;
-	/*
-	Cracker(boolean printMode, byte[] soughtDigest, int inputLength)
+	protected Collection<String> validInputStrings;
+	
+	
+	public Cracker()
 	{
-		setConfiguration(printMode, soughtDigest, inputLength);
+		validInputStrings = new LinkedList<String>();
 	}
-	*/
+	
+	protected void recordMatchingInput(String s) {
+		validInputStrings.add(s);
+	}
+	
+	protected Collection<String> getFoundInputs()
+	{
+		return validInputStrings;
+	}
 	
 	public void setConfiguration(boolean printMode, byte[] soughtDigest, int inputLength)
 	{

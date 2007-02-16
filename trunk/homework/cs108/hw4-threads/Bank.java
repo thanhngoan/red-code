@@ -11,15 +11,22 @@ import java.util.*;
 public class Bank {
 	public static final int ACCOUNTS = 20;	 // number of accounts
 	
-	protected Buffer buffer;
-	protected Account[] accounts;
-	protected Collection<Worker> workers;
-	protected Collection<TransactionRecord> atypicalTransactions;
-	protected int limit;
-	protected boolean limitSpecified;
+	protected Buffer buffer; // holds the transaction queue
+	protected Account[] accounts; //holds all the accounts
+	//protected Collection<Worker> workers; //all the worker threads
+	protected Collection<TransactionRecord> atypicalTransactions; //all the strange transactions
+	protected int limit; //amount under which bank account transactions should be reported
+	protected boolean limitSpecified; // true if the user specified a limit argument
 	
+	/**
+	 * Returns the number of accounts this bank can support.
+	 * @return
+	 */
 	protected int getAccountCapacity() { return ACCOUNTS; }
 	
+	/**
+	 * A simple record of a transaction.
+	 */
 	public class TransactionRecord
 	{
 		public Transaction transaction;
@@ -32,6 +39,10 @@ public class Bank {
 		}
 	}
 	
+	/**
+	 * Record of a transaction gone wrong
+	 * @author red
+	 */
 	public class BadTransactionRecord extends TransactionRecord {
 		public BadTransactionRecord(Transaction t, int balance)
 		{
@@ -40,27 +51,28 @@ public class Bank {
 		}
 	}
 	
-	public class Worker extends Thread {
+	/**
+	 * A bank "employee" thread responsible for running transactions.
+	 * @author red
+	 */
+	public class Worker extends Thread
+	{
 		public void run()
 		{
 			while (true)
 			{
-				try {
-					Transaction trans = buffer.remove();
-					if (trans == null)
-						break;
-					accounts[trans.from].enactTransactionAsGiver(trans);
-				}
-				catch (InterruptedException e)
-				{
-					
-				}
+				Transaction trans = buffer.remove();
+				if (trans == null)
+					break;
+				accounts[trans.from].enactTransactionAsGiver(trans);
 			}
 		}
 	}
 	
-	protected int numWorkers;
-	
+	/**
+	 * Boring constructor.
+	 *
+	 */
 	public Bank()
 	{
 		buffer = new Buffer();
@@ -70,19 +82,24 @@ public class Bank {
 			accounts[i] = new Account(this, i, 0);
 	}
 
-	public void initWorkers(int numWorkers)
+	/**
+	 * Initializes a set number of workers and returns a collection of them.
+	 * @param numWorkers
+	 * @return
+	 */
+	public Collection<Worker> initWorkers(int numWorkers)
 	{
-		workers = new LinkedList<Worker>();
+		Collection<Worker> workers = new LinkedList<Worker>();
 		for (int i=0; i < numWorkers; i++)
 		{
 			Worker w = new Worker();
 			workers.add(w);
 			w.start();
 		}
+		return workers;
 	}
-	/*
-	 Reads transaction data (from/to/amt) from a file for processing.
-	 (provided code)
+	/**
+	 * Reads transaction data (from/to/amt) from a file for processing.
 	 */
 	public void readFile(String file) {
 			try {
@@ -114,50 +131,60 @@ public class Bank {
 	
 	public int getLimit() { return limit; }
 
-	private void setLimit(int limit) {
-		this.limit = limit;
-	}
-
-	/*
-	 Processes one file of transaction data
-	 -fork off workers
-	 -read file into the buffer
-	 -wait for the workers to finish
-	*/
-	public void processFile(String file, int numWorkers) throws InterruptedException {
-		initWorkers(numWorkers);
+	/**
+	  * Processes one file of transaction data
+	  * -fork off workers
+	  * -read file into the buffer
+	  * -wait for the workers to finish
+	  */
+	public void processFile(String file, int numWorkers) {
+		
+		Collection<Worker> workers = initWorkers(numWorkers);
 		readFile(file);
 		for (int i=0; i < numWorkers; i++)
 			buffer.add(null);
 		for (Worker worker : workers)
-			worker.join();
+			try {
+				worker.join();
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
 	}
 	
+	/**
+	 * 
+	 * @param record whether to record bad transactions or not
+	 * @param limit balance under which bad transactions should be logged
+	 */
 	protected void configureBadTransactions(boolean record, int limit)
 	{
 		this.limit = limit;
 		if (record)
-		{
 			atypicalTransactions = new LinkedList<TransactionRecord>();
-		}
 		else
-
 			atypicalTransactions = null;
 	}
 	
+	/**
+	 * 
+	 * @return if we are recording/outputting bad transactions
+	 */
 	public boolean recordingBadTransactions() { return atypicalTransactions != null; }
 	
+	/** Records a bad transaction.
+	 * 
+	 * @param trans bad transaction
+	 */
 	public void addBad(Transaction trans)
 	{
 		atypicalTransactions.add(
-				new BadTransactionRecord(trans,
-				accounts[trans.from].getBalance()));
-	}
-
-	public Account findAccountById(int id) {
-		return accounts[id];
+				new BadTransactionRecord(trans,	accounts[trans.from].getBalance()));
 	}
 	
+	/**
+	 * Prints a list of bad transactions to std out.
+	 *
+	 */
 	public void printBadTransactions()
 	{
 		System.out.println("Bad transactions...");
@@ -165,10 +192,19 @@ public class Bank {
 			System.out.println(transrec);
 	}
 
-	/*
-	 Looks at commandline args and calls Bank processing.
-	*/
-	public static void main(String[] args) throws InterruptedException {
+	/**
+	 * 
+	 * @param id id of account to find
+	 * @return account with id
+	 */
+	public Account findAccountById(int id) {
+		return accounts[id];
+	}
+
+	/**
+	  * Looks at commandline args and calls Bank processing.
+	  */
+	public static void main(String[] args) {
 		// deal with command-lines args
 		if (args.length == 0) {
 			System.out.println("Args: transaction-file [num-workers [limit]]");
@@ -188,7 +224,7 @@ public class Bank {
 				limit_specified = true;
 			}
 		}
-		
+		//create bank, configure options, print results
 		Bank bank = new Bank();
 		bank.configureBadTransactions(limit_specified, limit);
 		bank.processFile(file, numWorkers);
@@ -196,7 +232,6 @@ public class Bank {
 			System.out.println(account);
 		if (bank.recordingBadTransactions())
 			bank.printBadTransactions();
-		
 	}
 
 }

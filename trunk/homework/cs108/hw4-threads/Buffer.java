@@ -39,10 +39,14 @@ public class Buffer {
 			try {
 				canRemove.acquire();
 			} catch (InterruptedException e) {
-				// TODO Auto-generated catch block
-				e.printStackTrace();
+				handleInterruptedException(e);
 			}
 		}
+	}
+	
+	protected void handleInterruptedException(InterruptedException e)
+	{
+		e.printStackTrace();
 	}
 	
 	/**
@@ -66,8 +70,7 @@ public class Buffer {
 		try {
 			canAdd.acquire();
 		} catch (InterruptedException e) {
-			// TODO Auto-generated catch block
-			e.printStackTrace();
+			handleInterruptedException(e);
 		}
 		synchronized (this) //avoid race conditions
 		{
@@ -90,10 +93,15 @@ public class Buffer {
 	 * @return the transaction popped from the stack
 	 * @throws InterruptedException 
 	 */
-	public Transaction remove() throws InterruptedException
+	public Transaction remove()
 	{
 		Transaction popped = null;
-		canRemove.acquire(); //ensure we are allowed to remove from the buffer
+		try {
+			canRemove.acquire();
+		} catch (InterruptedException e) {
+			handleInterruptedException(e);
+		}
+		//ensure we are allowed to remove from the buffer
 		synchronized (this) //avoid race conditions
 		{
 			storageCount--;
