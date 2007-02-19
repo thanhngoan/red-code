@@ -128,7 +128,6 @@ int omerrs = 0;               /* number of errors in lexing and parsing */
    Save the root of the abstract syntax tree in a global variable.
 */
 program	: class_list	{ ast_root = program($1); }
-error {  yyclearin; yyerrok; }
 ;
 
 class_list
@@ -174,28 +173,41 @@ CLASS TYPEID '{' feature_list '}' ';'
 /* Feature list may be empty, but no empty features in list. */
 feature_list :
 /* > 0 features */
-nonempty_feature_list { $$ = $1; }
+nonempty_feature_list { $$ = $1 != NULL ? $1 : nil_Features(); }
 /* empty */
 | {  $$ = nil_Features(); }
 ;
 
 nonempty_feature_list :
 /* single feature */
-feature ';' { $$ = single_Features($1); }
-/* many features */
-| nonempty_feature_list feature ';' {
-  if (YYRECOVERING())
-    {
-      
-    }
+feature {
+  if ($1)
+    $$ = single_Features($1);
   else
-    {
-      $$ = append_Features($1, single_Features($2));
-    }
+    $$ = NULL;
 }
-/* errors are ok as long as we eventually get a valid feature list. */
-| error nonempty_feature_list
-{ yyerrok; $$ = $2; }
+/* many features */
+| nonempty_feature_list feature {
+  if ($1 && $2)
+    $$ = append_Features($1, single_Features($2));
+  else if ($1)
+    $$ = $1;
+  else if ($2)
+    $$ = single_Features($2);
+  else
+    $$ = NULL;
+}
+;
+
+feature:
+/* method declaration */
+OBJECTID '(' method_formals ')' ':' TYPEID '{' expr '}' ';'
+{ $$ = method($1, $3, $6, $8); }
+/* attribute without assignment */
+| OBJECTID ':' TYPEID ';' { $$ = attr($1, $3, makeDefaultExpression($3)); }
+/* attribute with assignment */
+| OBJECTID ':' TYPEID ASSIGN expr ';' { $$ = attr($1, $3, $5); }
+| error { yyclearin; $$ = NULL; }
 ;
 
 formal:
@@ -206,17 +218,6 @@ method_formals:
 formal { $$ = single_Formals($1); }
 | method_formals ',' formal { $$ = append_Formals($1, single_Formals($3));}
 | { $$ = nil_Formals(); }
-;
-
-feature:
-/* method declaration */
-OBJECTID '(' method_formals ')' ':' TYPEID '{' expr '}'
-{ $$ = method($1, $3, $6, $8); }
-/* attribute without assignment */
-| OBJECTID ':' TYPEID { $$ = attr($1, $3, makeDefaultExpression($3)); }
-/* attribute with assignment */
-| OBJECTID ':' TYPEID ASSIGN expr { $$ = attr($1, $3, $5); }
-/*| error { yyclearin; $$ = NULL; }*/
 ;
 
 expr:
@@ -274,10 +275,10 @@ OBJECTID ASSIGN expr { $$ = assign($1, $3); }
     }
   else
     {
-      YYERROR;
+      YYERROR; //signal error if there are no valid lets
+      cerr << "signaling an error" << endl;
     }
 }
-
 /*
 
 | LET OBJECTID ':' TYPEID IN expr
@@ -342,7 +343,7 @@ comma_delimited_exprs:
 letvar :
 OBJECTID ':' TYPEID ASSIGN expr { $$ = new Letvar($1, $3, $5); }
 | OBJECTID ':' TYPEID {$$ = new Letvar($1, $3, no_expr()); }
-/*| error { yyclearin; $$ = NULL; } */
+| error { yyclearin; yyerrok; $$ = NULL; }
 ;
 
 letvars : letvar {
@@ -350,9 +351,7 @@ letvars : letvar {
   if ($1)
     $$ = new List<Letvar>($1);
   else
-    {
       $$ = NULL;
-    }
 }
 | letvar ',' letvars 
 {
@@ -363,7 +362,7 @@ letvars : letvar {
   else
     $$ = NULL;
 }
-;
+| letvar error { yyclearin; yyerrok; $$ = new List<Letvar>($1, NULL); }
 
 /*
 let_term :
