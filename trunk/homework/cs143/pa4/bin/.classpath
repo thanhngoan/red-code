@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<classpath>
+	<classpathentry excluding="cs143-lib/|lib/" kind="src" path=""/>
+	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER/org.eclipse.jdt.internal.debug.ui.launcher.StandardVMType/sun jvm 1.5"/>
+	<classpathentry kind="lib" path="cs143-lib"/>
+	<classpathentry kind="output" path="bin"/>
+</classpath>
