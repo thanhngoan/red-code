@@ -1,0 +1,37 @@
+Write-up for PA4
+----------------
+username: reddaly
+user: reddaly
+
+Matters of Architecture:
+I decided to take a simple recursive approach to semantic analysis.  Nodes of the AST are
+traversed in a few (incomplete) passes.  This is a brief summary of the steps involved:
+-Each program is traversed:
+	-Each class is traversed (class canonicalization):
+		-a class hierarchy and registry is constructed by calling class_::canonicalize()
+		 with the current environment.
+	-Each class is traversed (method canonicalization):
+		-Each feature is traversed and the methods of each class are established
+		 by calling canonicalize()
+	-Each class is traversed (recursive semantic analysis):
+		-Each feature is traversed (recursive semantic analysis):
+			-the expressions of the feature are recursively analyzed to verify and
+			yield types for all subexpressions and the main expression
+
+Expression analysis happens according to the rules in the COOL manual.  Generally,
+the analysis of each expression needs to accomplish two goals: check the correctness
+of the expression, and deduce a type of the expression.  Each expression implements
+a deduceType() function that returns the type of the expression.  Correctness checking
+is presumed to take place in deduceType().
+-Literal expressions yield their corresponding primitive types
+-Branch expressions yield the [most specific common superclass] of the types of both branches
+-Assignment expressions yield the type of the left hand side
+	*right hand side must be subtype of left hand side
+-Static dispatch expressions yield the type of the method
+	*
+
+Definitions:
+[1] specificity: specificity refers to how 
+			
+
+

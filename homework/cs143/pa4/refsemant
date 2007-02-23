@@ -1,0 +1,2 @@
+#!/bin/csh -f
+/usr/class/cs143/lib/.sun4/lexer $* | /usr/class/cs143/lib/.sun4/parser $* | /usr/class/cs143/lib/.sun4/semant $* 
