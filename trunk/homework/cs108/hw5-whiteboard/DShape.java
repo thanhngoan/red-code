@@ -2,6 +2,7 @@ import java.awt.Color;
 import java.awt.Graphics;
 import java.awt.Point;
 import java.awt.Rectangle;
+import java.awt.geom.Rectangle2D;
 import java.util.Collection;
 import java.util.LinkedList;
 import java.util.List;
@@ -31,6 +32,10 @@ public abstract class DShape {
 		return computeKnobs();
 	}
 	
+	/**
+	 * 
+	 * @return list of knobs
+	 */
 	protected List<Point> computeKnobs()
 	{
 		LinkedList<Point> points = new LinkedList<Point>();
@@ -42,7 +47,61 @@ public abstract class DShape {
 		return points;
 	}
 	
-	public Point attemptKnobSelection(Point click)
+	/**
+	 * Resizes the shape using knobs.  Requires the supervisor to keep track of (1) the anchor knob
+	 * (2) the initial position of the selected knob, and (3) the change in the position of the selected knob
+	 * since dragging started.
+	 * @param anchorKnob 
+	 * @param initialPositionOfSelectKnob
+	 * @param deltaSelected
+	 */
+	public void resizeByKnobs(Point anchorKnob, Point initialPositionOfSelectKnob, Point deltaSelected)
+	{
+		//simpleBounds does not correct for negative width/height
+		Rectangle simpleBounds = new Rectangle(); //(Rectangle) getModel().getBounds().clone();
+		simpleBounds.width = (anchorKnob.x - initialPositionOfSelectKnob.x) + deltaSelected.x;
+		simpleBounds.height = (anchorKnob.y - initialPositionOfSelectKnob.y) + deltaSelected.y;
+		
+		Point currentKnobPos = new Point
+			(initialPositionOfSelectKnob.x + deltaSelected.x,
+			 initialPositionOfSelectKnob.y + deltaSelected.y);
+		
+		getModel().setBounds(createRectangleContainingPoints(anchorKnob, currentKnobPos));
+	}
+	
+	/**
+	 * Returns a rectangle that contains both the given points.
+	 * @param one
+	 * @param two
+	 * @return
+	 */
+	public static Rectangle createRectangleContainingPoints(Point one, Point two)
+	{
+		Rectangle rect = new Rectangle();
+		if (one.x < two.x)
+			rect.x = one.x;
+		else
+			rect.x = two.x;
+
+		if (one.y < two.y)
+			rect.y = one.y;
+		else
+			rect.y = two.y;
+
+		rect.width = Math.abs(two.x - one.x);
+		rect.height = Math.abs(two.y - one.y);
+		return rect;
+	}
+	
+	
+	/**
+	 * Attempts to select an appropriate knob within this shape given the point of a click.
+	 * Returns the anchor knob and modifies outSelectedKnob to be the selected knob.
+	 * @param click point of click
+	 * @param outSelectedKnob output point for knob selected by mouse
+	 * @return
+	 */
+	public Point attemptKnobSelection(Point click, Point outSelectedKnob)
 	{
 		int index = 0;
 		List<Point> knobs = getKnobs();
@@ -53,6 +112,9 @@ public abstract class DShape {
 			Rectangle knobRect = computeKnobRect(knobPoint);
 			if (knobRect.contains(click))
 			{
+				//return appropriately
+				outSelectedKnob.x = knobPoint.x;
+				outSelectedKnob.y = knobPoint.y;
 				Point anchor = getOppositeKnob(index); // get opposite corner
 				return anchor;
 			}
@@ -61,6 +123,11 @@ public abstract class DShape {
 		return null;
 	}
 	
+	/**
+	 * Returns the knob opposite the knob at the given index
+	 * @param knobIndex
+	 * @return
+	 */
 	protected Point getOppositeKnob(int knobIndex)
 	{
 		return getKnobs().get((knobIndex + 2) % 4);
