@@ -3,6 +3,7 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.UnknownHostException;
 
 
 public class WhiteboardClient {
@@ -12,7 +13,7 @@ public class WhiteboardClient {
    int port;
    String host;
    
-   public WhiteboardClient(WhiteboardCanvas canvas, String host, int port) {
+   public WhiteboardClient(WhiteboardCanvas canvas, String host, int port) throws UnknownHostException, IOException {
 	   this.canvas = canvas;
 	   this.port = port;
 	   openSocket();
@@ -22,13 +23,9 @@ public class WhiteboardClient {
 	   
    }
    
-   protected void openSocket()
+   protected void openSocket() throws UnknownHostException, IOException
    {
-	   try {
-		   clientSocket = new Socket(host, port);
-		} catch (IOException e) {
-			handleException(e);
-		}
+	   clientSocket = new Socket(host, port);
 		
 	   listeningThread = new Thread() {
 		   public void run() {
@@ -71,7 +68,6 @@ public class WhiteboardClient {
 			   String command = (String) istream.readObject(); // read the command
 			   DShapeModel model = (DShapeModel) istream.readObject(); // read the model
 			   processCommand(command, model);
-			   System.out.println(command);
 		   }
 	   
 	   } catch (IOException e) {

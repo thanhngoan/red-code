@@ -3,6 +3,15 @@ import java.awt.Rectangle;
 
 
 public class DLineModel extends DShapeModel {
+	
+	Point pStart;
+	Point pEnd;
+	
+	public DLineModel() {
+		super();
+		pStart = new Point();
+		pEnd = new Point();
+	}
 
 
 	/**
@@ -19,8 +28,7 @@ public class DLineModel extends DShapeModel {
 	 * @return the origin of the line
 	 */
 	protected Point startPoint() {
-		Rectangle bounds = getBounds();
-		return new Point(bounds.x, bounds.y);
+		return new Point(pStart.x, pStart.y);
 	}
 
 	/**
@@ -29,6 +37,6 @@ public class DLineModel extends DShapeModel {
 	 */
 	protected Point endPoint() {
 		Rectangle bounds = getBounds();
-		return new Point(bounds.x + bounds.width, bounds.y + bounds.height);
+		return new Point(pEnd.x, pEnd.y);
 	}
 }

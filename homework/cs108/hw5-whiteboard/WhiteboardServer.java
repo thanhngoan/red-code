@@ -5,7 +5,7 @@ import java.net.Socket;
 import java.util.Collection;
 import java.util.LinkedList;
 
-
+// fairly obvious if you are familiar with the assignment docs
 public class WhiteboardServer {
    WhiteboardCanvas canvas;
    ServerSocket serverSocket;
@@ -23,7 +23,7 @@ public class WhiteboardServer {
 	   }
    }
    
-   public WhiteboardServer(WhiteboardCanvas canvas, int port) {
+   public WhiteboardServer(WhiteboardCanvas canvas, int port) throws IOException {
 	   this.canvas = canvas;
 	   this.port = port;
 	   openSocket();
@@ -84,7 +84,8 @@ public class WhiteboardServer {
 	   for (ServerClient client : clients)
 	   {
 		   try {
-			client.objstream.writeUnshared(obj);
+			   if (client.socket.isConnected())
+				   client.objstream.writeUnshared(obj);
 			
 		} catch (IOException e) {
 			handleException(e);
@@ -100,7 +101,8 @@ public class WhiteboardServer {
 	   for (ServerClient client : clients)
 	   {
 		   try {
-			client.objstream.flush();
+			   if (client.socket.isConnected())
+				   client.objstream.flush();
 			
 		} catch (IOException e) {
 			handleException(e);
@@ -110,19 +112,24 @@ public class WhiteboardServer {
    
    synchronized protected void addNewClient(Socket csock) {
 	   try {
-		clients.add(new ServerClient(csock));
-	} catch (IOException e) {
-		handleException(e);
-	}
-   }
-   
-   protected void openSocket()
-   {
-	   try {
-		   serverSocket = new ServerSocket(port);
-		} catch (IOException e) {
+		   ServerClient client = new ServerClient(csock);
+		   synchronized (client) {
+			   clients.add(client);
+			   // send previous objects to client
+			   for (DShape shape : canvas.getShapes())
+			   {
+					client.objstream.writeObject("add");
+					client.objstream.writeObject(shape.getModel());
+			   }
+		   }
+	   } catch (IOException e) {
 			handleException(e);
 		}
+   }
+   
+   protected void openSocket() throws IOException
+   {
+	   serverSocket = new ServerSocket(port);
 		
 	   listeningThread = new Thread() {
 		   public void run() {
