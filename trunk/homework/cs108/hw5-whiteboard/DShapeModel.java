@@ -1,6 +1,7 @@
 import java.awt.Color;
 import java.awt.Point;
 import java.awt.Rectangle;
+import java.io.IOException;
 import java.io.Serializable;
 import java.util.Collection;
 import java.util.LinkedList;
@@ -31,6 +32,18 @@ public class DShapeModel implements Serializable {
 		modelChangeListeners = new LinkedList<ModelListener>();
 		id = UNINITIALIZED_ID;
 	}
+	
+	 private void readObject(java.io.ObjectInputStream in) throws IOException, ClassNotFoundException {
+		 in.defaultReadObject();
+		 if (modelChangeListeners == null)
+			 modelChangeListeners = new LinkedList<ModelListener>();
+	 }
+	 
+	 private void writeObject(java.io.ObjectOutputStream out) throws IOException {
+		this.bounds = (Rectangle) this.bounds.clone();
+		this.color = new Color(this.color.getRGB());
+		out.defaultWriteObject();
+	 }
 	
 	public void mimic(DShapeModel other) {
 		this.bounds = (Rectangle) other.bounds.clone();

@@ -6,7 +6,18 @@ import java.awt.Rectangle;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
 import java.awt.event.MouseMotionListener;
+import java.awt.image.BufferedImage;
+import java.beans.XMLDecoder;
+import java.beans.XMLEncoder;
+import java.io.BufferedOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.ObjectOutputStream;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 
@@ -18,6 +29,7 @@ public class WhiteboardCanvas extends JPanel {
 	protected DShape selectedShape;
 	protected DragData drag;
 	protected int shapeIdCounter;
+	protected boolean interactiveMode;
 	
 
 	// listeners
@@ -81,6 +93,7 @@ public class WhiteboardCanvas extends JPanel {
 	public WhiteboardCanvas()
 	{
 		super();
+		interactiveMode = true;
 		shapeIdCounter = 1;
 		selectionChangeListeners = new LinkedList<SelectionChangeListener>();
 		shapeListListeners = new LinkedList<ShapeListListener>();
@@ -90,6 +103,9 @@ public class WhiteboardCanvas extends JPanel {
 		shapes = new LinkedList<DShape>();
 		initializeMouseListeners();
 	}
+
+	public boolean isInteractive() { return interactiveMode; }
+	public void setInteractive(boolean t) { interactiveMode = t; }
 	
 	protected void stopDragging() { drag = null; }
 
@@ -97,6 +113,7 @@ public class WhiteboardCanvas extends JPanel {
 		this.addMouseListener(new MouseListener() {
 			
 			public void mouseClicked(MouseEvent e) {
+				if (!isInteractive()) return;
 				setSelectedShape(findShapeAtPoint(e.getPoint()));
 			}
 
@@ -105,6 +122,7 @@ public class WhiteboardCanvas extends JPanel {
 			// else
 			// 2) start to move if the click is within the currently selected shape
 			public void mousePressed(MouseEvent e) {
+				if (!isInteractive()) return;
 				/*
 				if (getSelectedShape() == null)
 					setSelectedShape(findShapeAtPoint(e.getPoint()));
@@ -132,6 +150,7 @@ public class WhiteboardCanvas extends JPanel {
 			}
 			
 			public void mouseReleased(MouseEvent e) {
+				if (!isInteractive()) return;
 				stopDragging();
 			}
 			
@@ -142,6 +161,7 @@ public class WhiteboardCanvas extends JPanel {
 		this.addMouseMotionListener(new MouseMotionListener() {
 
 			public void mouseDragged(MouseEvent e) {
+				if (!isInteractive()) return;
 				if (drag != null && drag.isDragging())
 				{
 					Point changeSinceDragStart = new Point
@@ -323,5 +343,81 @@ public class WhiteboardCanvas extends JPanel {
 			if (shape.getModel().getId() == id)
 				return shape;
 		return null;
+	}
+	
+	protected void saveSemanticFile(File file) {
+		try {
+			XMLEncoder xmlout =
+				new XMLEncoder(
+                    new BufferedOutputStream(
+                    	new FileOutputStream(file)));
+
+			DShapeModel[] models = getShapeModelsArray();
+			xmlout.writeObject(models);
+			xmlout.close();
+			
+		} catch (FileNotFoundException e) {
+			e.printStackTrace();
+		}
+	}
+	
+	protected void clearAllShapes() {
+		for (int i=0; i < getShapes().size();)
+			removeShape(getShapes().get(i));
+	}
+
+	
+	protected void loadSemanticFile(File file) {
+		try {
+			XMLDecoder xmlin = new XMLDecoder(new FileInputStream(file));
+			DShapeModel[] models = (DShapeModel[]) xmlin.readObject();
+			xmlin.close();
+			
+			//get rid of the old
+			clearAllShapes();
+			//and bring in the new
+			for (DShapeModel model : models)
+				addShape(model);
+			
+		} catch (FileNotFoundException e) {
+			e.printStackTrace();
+		} catch (ClassCastException e) {
+			e.printStackTrace();
+			
+		}
+	}
+	
+	
+	/**
+	 * Saves the canvas to a file.  Thanks to nick.
+	 * @param filename
+	 */
+	protected void saveImageFile(File file) {
+	     // Create an image bitmap, same size as ourselves
+	     BufferedImage image = (BufferedImage) createImage(getWidth(), getHeight());
+	     // Get Graphics pointing to the bitmap, and call paintAll()
+	     // This is the RARE case where calling paint() is appropriate
+	     // (normally the system calls paint()/paintComponent())
+	     Graphics g = image.getGraphics();
+	     
+
+	     DShape theSelection = this.getSelectedShape();
+	     selectedShape = null;
+	     paintAll(g);
+	     selectedShape = theSelection;
+	     try {
+	         javax.imageio.ImageIO.write(image, "PNG", file);
+	     }
+	     catch (IOException ex) {
+	         ex.printStackTrace();
+	     }
+		
+	}
+	protected DShapeModel[] getShapeModelsArray() {
+		DShapeModel[] models = new DShapeModel[getShapes().size()];
+		int i =0;
+		for (DShape shape : getShapes())
+			models[i++] = shape.getModel();
+		return models;
 	}
 }

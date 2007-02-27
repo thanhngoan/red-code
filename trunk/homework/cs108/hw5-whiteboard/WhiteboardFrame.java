@@ -2,11 +2,21 @@ import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Dimension;
+import java.awt.FileDialog;
 import java.awt.Font;
 import java.awt.GraphicsEnvironment;
 import java.awt.Rectangle;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.ObjectOutputStream;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.net.UnknownHostException;
+import java.util.Collections;
 
 import javax.swing.BorderFactory;
 import javax.swing.Box;
@@ -16,7 +26,9 @@ import javax.swing.JColorChooser;
 import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JDialog;
+import javax.swing.JFileChooser;
 import javax.swing.JLabel;
+import javax.swing.JOptionPane;
 import javax.swing.JPanel;
 import javax.swing.JFrame;
 import javax.swing.JScrollPane;
@@ -31,6 +43,7 @@ public class WhiteboardFrame extends JFrame {
 	public static String[] DEFAULT_FONT_NAMES = new String[]{ "Dialog" };
 	public static String DEFAULT_TEXT = "Lisp is for lovers";
 	public static final String[] SHAPE_TABLE_COLUMN_NAMES = new String[] {"Shape", "x", "y", "Width", "Height" };
+	public static final int DEFAULT_PORT = 4444;
 	JButton rectButton;
 	JButton ovalButton;
 	JButton lineButton;
@@ -44,6 +57,10 @@ public class WhiteboardFrame extends JFrame {
 	JButton startServerButton;
 	JButton startClientButton;
 	JLabel  networkingStatus;
+	
+	JButton fileSaveButton;
+	JButton fileLoadButton;
+	JButton imageSaveButton;
 
 	JTextField textSetField;
 	JComboBox textFontField; 
@@ -159,6 +176,7 @@ public class WhiteboardFrame extends JFrame {
 		
 		leftSide.add(colorSelectionArea);
 		
+		// networking
 		Box networkingArea = new Box(BoxLayout.X_AXIS);
 		startServerButton = new JButton("Start Server");
 		startClientButton = new JButton("Start Client");
@@ -168,6 +186,18 @@ public class WhiteboardFrame extends JFrame {
 		networkingArea.add(networkingStatus);
 		networkingArea.setBorder(BorderFactory.createTitledBorder("Networking"));
 		leftSide.add(networkingArea);
+		
+
+		// file saving
+		Box savingArea = new Box(BoxLayout.X_AXIS);
+		fileSaveButton = new JButton("Save to File");
+		fileLoadButton = new JButton("Load from File");
+		imageSaveButton = new JButton("Save Image");
+		savingArea.add(fileSaveButton);
+		savingArea.add(fileLoadButton);
+		savingArea.add(imageSaveButton);
+		savingArea.setBorder(BorderFactory.createTitledBorder("Save Whiteboard"));
+		leftSide.add(savingArea);
 		
 		//canvas
 		canvas = new WhiteboardCanvas();
@@ -205,6 +235,10 @@ public class WhiteboardFrame extends JFrame {
 
 	public boolean inServerMode() {
 		return networkServer != null;
+	}
+	
+	public boolean isInteractive() {
+		return !inClientMode();
 	}
 	
 	public boolean inClientMode() {
@@ -340,34 +374,158 @@ public class WhiteboardFrame extends JFrame {
 		});
 		
 		canvas.addSelectionChangeListener(new WhiteboardCanvas.SelectionChangeListener() {
-
 			public void selectionChanged(DShape newShape, DShape oldShape) {
 				updateInspectorInformation();
 			}
-			
 		});
 		
 		startServerButton.addActionListener(new ActionListener() {
 			
 			public void actionPerformed(ActionEvent arg0) {
-				int port = 4444;
-				networkServer = new WhiteboardServer(canvas, port);
-				startClientButton.setEnabled(false);
-				startServerButton.setEnabled(false);
-				setNetworkStatusText("Serving...");
+				int port = DEFAULT_PORT;
+				boolean performConnect = true;
+				// loop until the user enters a valid port
+				while (true) {
+					String portString = JOptionPane.showInputDialog("Server Port:", port);
+					if (portString == null)
+					{
+						performConnect = false;
+						break;
+					}
+					try {
+						int portAttempt = Integer.parseInt(portString);
+						port = portAttempt;
+						break;
+					} catch (NumberFormatException e) {}
+				}
+				try {
+					if (performConnect)
+					{
+						networkServer = new WhiteboardServer(canvas, port);
+						updateControlsForServerMode();
+						setNetworkStatusText("Serving...");
+					}
+				} catch (IOException e) {
+					setNetworkStatusText("Error starting server.");
+				}
 			}
 		});
 		
 		startClientButton.addActionListener(new ActionListener() {
 			
 			public void actionPerformed(ActionEvent arg0) {
-				int port = 4444;
-				networkClient = new WhiteboardClient(canvas, "localhost", port);
-				startClientButton.setEnabled(false);
-				startServerButton.setEnabled(false);
-				setNetworkStatusText("Connected.");
+				int port = DEFAULT_PORT;
+				String host = "localhost";
+				boolean performConnect = true;
+				while (true)
+				{
+					String urlString = JOptionPane.showInputDialog("Enter a URL to connect to (host:port syntax).", "localhost:" + port);
+					if (urlString == null)
+					{
+						performConnect = false;
+						break;
+					}
+					URL url;
+					try {
+						url = new URL("http://" + urlString);
+						if (url.getPort() > 0) port = url.getPort();
+						host = url.getHost();
+						break;
+					} catch (MalformedURLException e) {} //loop
+				}
+			    
+				try {
+					if (performConnect)
+					{
+						networkClient = new WhiteboardClient(canvas, host, port);
+						updateControlsForClientMode();
+						setNetworkStatusText("Connected.");
+					}
+				} catch (UnknownHostException e) {
+					setNetworkStatusText("Unknown host.");
+				} catch (IOException e) {
+					setNetworkStatusText("Error connecting.");
+				}
 			}
 		});
+		
+		fileSaveButton.addActionListener(new ActionListener() {
+
+			public void actionPerformed(ActionEvent e) {
+		        JFileChooser chooser = createFileChooser();
+		        int status = chooser.showOpenDialog(frame);
+		        if (status == JFileChooser.APPROVE_OPTION) {
+		        	File file = chooser.getSelectedFile();
+					canvas.saveSemanticFile(file);
+		        }
+			}
+			
+		});
+		
+		fileLoadButton.addActionListener(new ActionListener() {
+
+			public void actionPerformed(ActionEvent e) {
+		        JFileChooser chooser = createFileChooser();
+		        int status = chooser.showOpenDialog(frame);
+		        if (status == JFileChooser.APPROVE_OPTION) {
+		        	File file = chooser.getSelectedFile();
+					canvas.loadSemanticFile(file);
+		        }
+			}
+			
+		});
+		
+		imageSaveButton.addActionListener(new ActionListener() {
+
+			public void actionPerformed(ActionEvent e) {
+		        JFileChooser chooser = createFileChooser();
+		        int status = chooser.showOpenDialog(frame);
+		        if (status == JFileChooser.APPROVE_OPTION) {
+		        	File file = chooser.getSelectedFile();
+					canvas.saveImageFile(file);
+		        }
+			}
+			
+		});	
+	}
+	
+	//thanks nick
+    protected JFileChooser createFileChooser() {
+    	JFileChooser chooser = new JFileChooser();
+    	try {
+    	    // The "." stuff attempts to open in the "current"
+    	    // directory.
+    	    File dir = new File(new File(".").getCanonicalPath());
+    	    chooser.setCurrentDirectory(dir);
+    	}
+    	catch (Exception ex) {
+    	    ex.printStackTrace();
+    	}
+    	return chooser;
+    }
+
+	
+	protected void updateControlsForClientMode() {
+		startClientButton.setEnabled(false);
+		startServerButton.setEnabled(false);
+		fileLoadButton.setEnabled(false);
+		canvas.setInteractive(false);
+		lineButton.setEnabled(false);
+		textButton.setEnabled(false);
+		ovalButton.setEnabled(false);
+		rectButton.setEnabled(false);
+		removeButton.setEnabled(false);
+		toFrontButton.setEnabled(false);
+		toBackButton.setEnabled(false);
+		fileLoadButton.setEnabled(false);
+		textFontField.setEnabled(false);
+		textSetField.setEnabled(false);
+		setColorButton.setEnabled(false);
+	}
+	
+	protected void updateControlsForServerMode() {
+		startClientButton.setEnabled(false);
+		startServerButton.setEnabled(false);
 	}
 	
 	protected void updateInspectorInformation() {
@@ -375,10 +533,13 @@ public class WhiteboardFrame extends JFrame {
 		if (shape != null && shape instanceof DText)
 		{
 			DTextModel model = ((DTextModel)shape.getModel());
-			textSetField.setEnabled(true);
-			textFontField.setEnabled(true);
 			textSetField.setText(model.getText());
 			textFontField.setSelectedItem(model.getFontFamily());
+			if (isInteractive())
+			{
+				textSetField.setEnabled(true);
+				textFontField.setEnabled(true);
+			}
 		}
 		else
 		{
