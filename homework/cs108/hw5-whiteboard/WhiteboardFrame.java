@@ -5,6 +5,7 @@ import java.awt.Dimension;
 import java.awt.FileDialog;
 import java.awt.Font;
 import java.awt.GraphicsEnvironment;
+import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.event.ActionEvent;
 import java.awt.event.ActionListener;
@@ -284,7 +285,9 @@ public class WhiteboardFrame extends JFrame {
 
 			public void actionPerformed(ActionEvent e) {
 				DLineModel model = new DLineModel();
-				initializeAndAddModelToCanvas(model);
+				model.setOrigin(new Point(100, 100));
+				model.setEndpoint(new Point(150, 150));
+				canvas.addShape(model);
 			}
 		}); 
 		textButton.addActionListener(new ActionListener() {

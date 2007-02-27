@@ -39,6 +39,7 @@ public class DShapeModel implements Serializable {
 			 modelChangeListeners = new LinkedList<ModelListener>();
 	 }
 	 
+	 //	serialization hack for deep copy
 	 private void writeObject(java.io.ObjectOutputStream out) throws IOException {
 		this.bounds = (Rectangle) this.bounds.clone();
 		this.color = new Color(this.color.getRGB());

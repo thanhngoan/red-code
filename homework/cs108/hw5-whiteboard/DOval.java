@@ -8,7 +8,7 @@ public class DOval extends DShape {
 	void draw(Graphics g) {
 		g.setColor(getModel().getColor());
 		Rectangle pos = ((DOvalModel)getModel()).getBounds();
-		g.drawOval(pos.x, pos.y, pos.width, pos.height);
+		g.fillOval(pos.x, pos.y, pos.width, pos.height);
 	}
 
 }

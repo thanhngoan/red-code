@@ -20,9 +20,9 @@ public class DLine extends DShape {
 	public List<Point> computeKnobs()
 	{
 		LinkedList<Point> points = new LinkedList<Point>();
-		Rectangle bounds = getModel().getBounds();
-		points.add(new Point(bounds.x + 1,                bounds.y + 1));
-		points.add(new Point(bounds.x + bounds.width - 1, bounds.y + bounds.height - 1));
+		DLineModel line = (DLineModel) getModel();
+		points.add(new Point(line.getOrigin().x,                line.getOrigin().y));
+		points.add(new Point(line.endPoint().x,                 line.endPoint().y));
 		return points;
 	}
 	
@@ -30,6 +30,26 @@ public class DLine extends DShape {
 	{
 		return getKnobs().get((knobIndex + 1) % 2);
 	}
+	
+
+	/**
+	 * Resizes the shape using knobs.  Requires the supervisor to keep track of (1) the anchor knob
+	 * (2) the initial position of the selected knob, and (3) the change in the position of the selected knob
+	 * since dragging started.
+	 * @param anchorKnob 
+	 * @param initialPositionOfSelectKnob
+	 * @param deltaSelected
+	 */
+	public void resizeByKnobs(Point anchorKnob, Point initialPositionOfSelectKnob, Point deltaSelected)
+	{
+		Point theOrigin = (Point) anchorKnob.clone();
+		Point theEndpoint = new Point
+			(initialPositionOfSelectKnob.x + deltaSelected.x,
+			 initialPositionOfSelectKnob.y + deltaSelected.y);
+		DLineModel line = (DLineModel) getModel();
+		line.setOrigin(theOrigin);
+		line.setEndpoint(theEndpoint);
+	}	
 
 }
  

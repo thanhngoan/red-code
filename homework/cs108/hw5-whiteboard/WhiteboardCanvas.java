@@ -81,6 +81,7 @@ public class WhiteboardCanvas extends JPanel {
 
 		// drag data for resizing
 		Point resizeAnchor;
+		Point resizeKnobAtCursor;
 		
 		// drag data for translating
 		Point initialShapeOrigin;
@@ -132,7 +133,8 @@ public class WhiteboardCanvas extends JPanel {
 					drag = new DragData();
 					drag.start = (Point) e.getPoint().clone();
 					//  start to resize if the selected shape has a knob in the current click position
-					drag.resizeAnchor = getSelectedShape().attemptKnobSelection(drag.start);
+					drag.resizeKnobAtCursor = new Point();
+					drag.resizeAnchor = getSelectedShape().attemptKnobSelection(drag.start, drag.resizeKnobAtCursor);
 					if (drag.resizeAnchor != null)
 					{
 						//we are resizing
@@ -166,7 +168,12 @@ public class WhiteboardCanvas extends JPanel {
 				{
 					Point changeSinceDragStart = new Point
 					   (e.getPoint().x - drag.start.x, e.getPoint().y -  drag.start.y);
-					if (drag.isResizingShape()) {
+					if (drag.isResizingShape())
+					{
+						//resize the shape according the the current knob positions
+						getSelectedShape().resizeByKnobs
+							(drag.resizeAnchor, drag.resizeKnobAtCursor, changeSinceDragStart);
+						
 						
 					} 
 					else if (drag.isMovingShape())
