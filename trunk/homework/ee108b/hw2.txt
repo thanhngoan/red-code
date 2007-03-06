@@ -1,0 +1,196 @@
+1.
+#for (i=0; i<=100; i++)
+#   a[i] = b[i] + c;
+
+#$a0 holds address of a
+#$a1 holds address of b
+#$t0 holds variable i
+
+#initialization
+addiu $t0, $zero, 0       # initialize i
+lw $s1, 4($a0)            # load array lengths of a and b into s1 and s2
+lw $s2, 4($a1)          
+
+fortest:
+#test part of the loop
+slti $t1, $t0, 101        # i < 101 stored in $t1
+beq $t1, $zero, forend    #jump to end if !(i < 101)
+
+#body part of the loop
+sll $t1, 2($t0)           #store i<<2 in $t1 (byte offset into arrays a and b)
+
+#error handling for reading b[i]
+slt $t2, $t0, $s2         # if !(i < b.length) goto OutOfBounds
+beq $t2, $zero, OutOfBounds
+
+#reading b[i] + c into $t3
+add $t2, $t1, $a1         #store location of b[i] in $t2
+lw $t3, 8($t2)            # load b[i] into $t3
+addu $t3, $t3, $s0        # store b[i] + c in $t3
+
+#error handling for accessing a[i]
+slt $t2, $t0, $s1         # if !(i < a.length) goto OutOfBounds
+beq $t2, $zero, OutOfBounds
+
+#storing b[i] + c 
+add $t4, $t1, $a0         #store location of a[i] in $t4
+sw $t3, 8($t4)            #store b[i] + c in a[i]
+
+#restarting loop
+addi $t0, $t0, 1          #increment and jump to the start of the loop
+j fortest
+
+forend:
+
+2.
+inst type  | % inst composition
+arith:       42% (24 + 18)
+data trans:  36%
+cond branch: 18%
+jump:        3%
+
+sum(.42 * 1 + .36 * 1.1 + .18 * 2.2 + .03*2) = 1.272 CPI
+
+3.
+Computer A CPI: 1.5
+Computer B CPI: 2.5
+Ratio of CPI on A to B: 1.5/2.5 = 3/5
+Ratio of CPI on B to A: 5/3
+
+Our program has 100,000 instructions on A (= 1x10^5 instructions)
+running time (RT) = (cycles) / (speed [cycles/second])
+Cycles on A (Ca) = 1x10^5 * 1.5
+RTa = Ca / 1.6x10^9
+RTb = Cb / 2.5x10^9 = #instr * 2.5 / 2.4x10^9 = RTa
+#instr = RTa / (2.5 / 2.4x10^9)
+       = ((1x10^5 * 1.5) / 1.6x10^9) / (2.5 /2.4x10^9)
+       = 90,000 instructions
+
+4.
+Loads and stores right now do 2 things: calculate the effective memory
+address to read/write, and then perform the read/write.  This involves
+1 ALU operation and 1 memory access.  Since we now do not need to
+perform arithmetic to determine the read/write address.
+
+Thus, we can eliminate the ALU operation for all loads and stores.  This
+allows us to drop the connection between the ALU and data memory unit,
+and to connect the read data 1 output of the register block directly to
+the data memory address input.
+
+5.
+# this is the case in which we are allowed to use a temporary register
+addiu $at, $rs, 0 #store rs in temp register
+addiu $rs, $rt, 0 #store rt in rs
+addiu $rt, $at, 0 #store $at (temped $rs) in $rt
+
+# this is the case when we must use memory instead of an extra register
+sw $rs, temp($r0)     # store rs in memory
+addiu $rs, $rt, 0   # store value of rt in rs
+lw $rt, temp($r0)     # store value of rs in rt
+
+assuming 1 cycle per instruction (for both old and new instruction set)
+
+swap operations will take 1 instruction instead of 3
+1.05 * (1 - portion swap operations) + (1/3 * portion of swap operations) = 1
+call portion of swap operations PSO
+
+1.05 - 1.05*PSO + 1/3 * PSO = 1
+(1/3 - 1.05)PSO = -.05
+PSO = (-.05)/(1/3 - 1.05) = .06977 ~= 6.98%
+
+for 10% increase in single instruction clock period
+PSO = (-.1)/(1/3 - 1.1) = .1304 ~= 13.0%
+
+
+6.
+a.
+The main optimization performed by the compiler was in the efficient use of
+registers instead of memory allocation.  This is evident in the instruction
+counts that follow.  There is also "induction variable elimination" done with
+respect to i.  in 0x20
+
+b.
+unoptimized instruction counts
+------------------------------
+0x0   lui     1x
+0x4   addiu   1x
+0x8   addu    1x
+0xc   addiu   1x
+0x10  sw      1x
+0x14  sw      1x
+0x18  sw      1x
+0x1c  move    1x
+0x20  li      1x
+0x24  sw      1x
+0x28: sw      1x
+# above here executed 1x
+0x2c: lw      101x
+0x30: slti    101x
+0x34: bne     101x
+0x38: j       1x
+0x3c: lw      101x
+0x40: move    101x
+0x44: sll     101x
+0x48: lw      101x
+0x4c: addu    101x
+0x50: lw      101x
+0x54: move    101x
+0x58: sll     101x
+0x5c: lw      101x
+0x60: addu    101x
+0x64: lw      101x
+0x68: lw      101x
+0x6c: addu    101x
+0x70: sw      101x
+0x74: lw      101x
+0x78: addiu   101x
+0x7c: move    101x
+0x80: sw      101x
+0x84: j       101x
+0x88: move    1x
+0x8c: lw      1x
+0x90: addiu   1x
+0x94: jr      1x
+
+-O2 instruction counts
+-----------------------
+0x0   lui    1x
+0x4   addiu  1x
+0x8   addu   1x
+0xc   li     1x
+0x10  move   1x
+0x14  lw     1x
+0x18  lw     1x
+0x1c  lw     100x
+0x20  addiu  100x
+0x24  addiu  100x
+0x28  addu   100x
+0x2c  sw     100x
+0x30  slti   100x
+0x34  addiu  100x
+0x38  bne    100x
+0x3c  jr     1x
+
+totals for unoptimized
+type         count    %        mix      notes
+------------------------------------------------
+ALU:         1018     45.5     .455     (6 + 101*10 + 2)
+Memory:      1016     45.4     .454     (5 + 101*10 + 1)
+Branch/Jump: 204      9.12     .0912    (1 + 101*2 + 1)
+*            2238     100      1.000        TOTAL
+
+totals for -O2
+type         count     %        mix    notes
+------------------------------------------------
+ALU:         505       62.5     .625
+Memory:      202       25.0     .250
+Branch/Jump: 101       12.5     .125   (100/1)
+*            808       100      1.00    TOTAL
+
+c.
+The reference to ra needs to be resolved by the linker (0x3c) since it is the
+main function.
+
+Most other information looks to already have been resolved.  For example,
+there are constant placeholders for referencing the global variables a and b,
+and an a priori filled registered (t9) with offset information.
