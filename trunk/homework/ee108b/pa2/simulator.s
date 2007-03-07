@@ -244,11 +244,11 @@ addi $t1, $zero, 42
 beq  $t2, $t1, performSLT
 
 performADD:
-add $t1, $s1, $s2         # add rs and rd into t1
+add $t1, $s1, $s2         # add rs and rt into t1
 j afterRCompute
 
 performSUB:
-sub $t1, $s1, $s2         # add rs and rd into t1
+sub $t1, $s1, $s2         # add rs and rt into t1
 j afterRCompute
 
 performAND:
@@ -289,24 +289,11 @@ beq  $t1, $s0, performBEQ
 addi $t1, $zero, 5
 beq  $t1, $s0, performBNE
 
-addi $t1, $zero, 43
+addi $t1, $zero, 35
 beq  $t1, $s0, performLW
 
-addi $t1, $zero, 35
+addi $t1, $zero, 43
 beq  $t1, $s0, performSW
-
-#print a number
-move $t2, $a0           # number
-move $a0, $s0           # number
-li $v0, 1
-syscall
-la $a0, retn            # end of line
-li $v0, 4
-syscall
-move $a0, $t2           # number
-
-addi $t1, $zero, 5
-beq  $t1, $s0, performANDI
 
 # addi instruction
 performAddI:
@@ -385,6 +372,23 @@ sra  $s3, $s3, 16
 #store RS < immediate in t1
 add $t1, $s1, $s3
 add $t1, $a3, $t1
+lw $t3, 0($t1)
+
+move $t2, $a0           # number
+move $a0, $t3           # number
+li $v0, 1
+syscall
+la $a0, retn            # end of line
+li $v0, 4
+syscall
+move $a0, $t1           # number
+li $v0, 1
+syscall
+la $a0, retn            # end of line
+li $v0, 4
+syscall
+move $a0, $t2           # number
+
 lw $t1, 0($t1)
 j afterICompute
 
@@ -393,10 +397,19 @@ performSW:
 sll  $s3, $s3, 16         #extends the unnoticed sign to 32 bits
 sra  $s3, $s3, 16
 
-#store RS < immediate in t1
+sll  $s2, $s2, 2          #get offset of virtual register in memory
+addu $s2, $a0, $s2        #s2 now holds actual address of rs data
+                          #now sw $x, 0(s2) will store data in $x into rs reg
+lw   $s2, 0($s2)          #***s2 now holds rt data***
+
+#sll  $s1, $t0, 6
+#srl  $s1, $s1, 6
+#srl  $s1, $s1, 21
+
+#store 
 add $t1, $s1, $s3         #immediate + rs
 add $t1, $a3, $t1         #actual memory address of memory
-sw $t1, 0($s2)
+sw  $s2, 0($t1)
 j afterNonjump
 
 # instructions should jump to afterRCompute when they have finished
