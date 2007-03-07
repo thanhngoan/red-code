@@ -152,8 +152,7 @@ beq $t0, $zero, endexec   #all zeros is ENDOF instruction
 # I instructions: rs mask: 65011712 rt mask: 2031616 immediate mask: 65535
 
 decodeAny:
-andi $s0, $t0, 4227858432 #put opcode in s0
-srl  $s0, $s2, 26         # translate opcode
+srl  $s0, $t0, 26         # translate opcode int S0
 
 #figure out if it's a jump instruction
 addiu $t1, $zero, 48       #jal
@@ -165,9 +164,9 @@ beq   $s0, $t1, decodeJ
 #default to R/I type instructions
 j decodeRI
 
-decodeJ:
-andi $s1, $t0, 67108863   #put jump address into s1
-srl  $s1, $s1, 21         #***s1 now holds jump address***
+decodeJ:                 #UNTESTED
+sll $s1, $t0, 6          #truncate the upper 6 bits
+srl $s1, $t0, 6          #***s1 now holds jump address***
 
 addiu $t1, $zero, 48       #goto jal
 beq   $s0, $t1, performJAL
@@ -184,55 +183,95 @@ addiu $s7 $s7, 1           #increment J instruction count
 j execpc                   # execute that instruction
 
 decodeRI:
-andi $s1, $t0, 65011712   #put rs in s1
-srl  $s1, $s1, 21         # translate opcode
+#andi $s1, $t0, 65011712
+                          #put rs in s1
+sll $s1, $t0, 6
+srl $s1, $s1, 6
+srl  $s1, $s1, 21
 sll  $s1, $s1, 2          #get offset of virtual register in memory
 addu $s1, $a0, $s1        #s1 now holds actual address of rs data
 lw   $s1, 0($s1)          #***s1 now holds actual rs data***
 
-andi $s2, $t0, 2031616    #put rt in s2
+                          #put rt in s2
+sll  $s2, $t0, 11
+srl  $s2, $s2, 11
 srl  $s2, $s2, 16         # translate opcode
-sll  $s2, $s2, 2          #get offset of virtual register in memory
-addu $s2, $a0, $s2        #***s2 now holds actual address of rs data***
-                          #now sw $x, 0(s2) will store data in $x into rs reg
+
 beq $s0, $zero, decodeR
 j decodeI
 
 decodeR:
-andi $s3, $t0, 65011712   #put rd in s1
-srl  $s3, $s3, 11         # translate opcode
-sll  $s3, $s3, 2          #get offset of virtual register in memory
-addu $s3, $a0, $s3        #s3 now holds actual address of rs data
-lw   $s3, 0($s3)          #***s3 now holds actual rd data***
+addiu $s5 $s5, 1          #increment I instruction count
 
-andi $s4, $t0, 65011712   #put shamt in s4
+sll  $s2, $s2, 2          #get offset of virtual register in memory
+addu $s2, $a0, $s2        #s2 now holds actual address of rs data
+                          #now sw $x, 0(s2) will store data in $x into rs reg
+lw   $s2, 0($s2)          #***s2 now holds rt data***
+                          #put rd in s1
+sll  $s3, $t0, 16
+srl  $s3, $s3, 16
+srl  $s3, $s3, 11         # translate rd
+#sll  $s3, $s3, 2          #get offset of virtual register in memory
+#addu $s3, $a0, $s3        #***s3 now holds actual address of rs data***
+
+sll  $s4, $t0, 21
+srl  $s4, $s4, 21
+                          #put shift amount in s4
 srl  $s4, $s4, 6          #translate opcode
 
 andi $t2, $t0, 63         #put funct code in t2
 
+#dispatch according to function codes
+addi $t1, $zero, 0
+beq  $t2, $t1, performSLL
+
+addi $t1, $zero, 32
+beq  $t2, $t1, performADD
+
+addi $t1, $zero, 34
+beq  $t2, $t1, performSUB
+
+addi $t1, $zero, 36
+beq  $t2, $t1, performAND
+
+addi $t1, $zero, 0
+beq  $t2, $t1, performSLL
+
+addi $t1, $zero, 38
+beq  $t2, $t1, performXOR
+
+addi $t1, $zero, 42
+beq  $t2, $t1, performSLT
+
 performADD:
-add $t1, $s1, $s3         # add rs and rd into t1
+add $t1, $s1, $s2         # add rs and rd into t1
 j afterRCompute
 
 performSUB:
-sub $t1, $s1, $s3         # add rs and rd into t1
+sub $t1, $s1, $s2         # add rs and rd into t1
 j afterRCompute
 
 performAND:
-and $t1, $s1, $s3         # add rs and rd into t1
+and $t1, $s1, $s2         # add rs and rd into t1
 j afterRCompute
 
-# TODO
-performSLL:
-sll $t1, $s1, $t1         # add rs and rd into t1
-j afterRCompute
+performSLL:                   #shift amount is in s4
+move $t1, $s2
+move $t2, $s4
+SLLLoop:                      #shift left 1 bit at a time
+  beq $t2, $zero, SLLLoopEnd
+  sll $t1, $t1, 1
+  addi $t2, $t2, -1
+  j SLLLoop
+SLLLoopEnd:
+  j afterRCompute
 
 performSLT:
-slt $t1, $s1, $s3         # add rs and rd into t1
+slt $t1, $s1, $s2         # add rs and rd into t1
 j afterRCompute
 
 performXOR:
-xor $t1, $s1, $s3         # add rs and rd into t1
+xor $t1, $s1, $s2         # add rs and rd into t1
 j afterRCompute
 
 decodeI:
@@ -243,6 +282,32 @@ andi $s3, $t0, 65535      #put immediate in s3
 
 addi $t1, $zero, 8
 beq  $t1, $s0, performAddI
+
+addi $t1, $zero, 4
+beq  $t1, $s0, performBEQ
+
+addi $t1, $zero, 5
+beq  $t1, $s0, performBNE
+
+addi $t1, $zero, 43
+beq  $t1, $s0, performLW
+
+addi $t1, $zero, 35
+beq  $t1, $s0, performSW
+
+#print a number
+move $t2, $a0           # number
+move $a0, $s0           # number
+li $v0, 1
+syscall
+la $a0, retn            # end of line
+li $v0, 4
+syscall
+move $a0, $t2           # number
+
+addi $t1, $zero, 5
+beq  $t1, $s0, performANDI
+
 # addi instruction
 performAddI:
 sll  $s3, $s3, 16         #extends the unnoticed sign to 32 bits
@@ -255,6 +320,42 @@ j afterICompute
 performANDI:
 sll  $s3, $s3, 16         #extends the unnoticed sign to 32 bits
 sra  $s3, $s3, 16
+
+#add the value in rs to the value of the immediate into t1
+and $t1, $s1, $s3
+j afterICompute
+
+performBEQ:
+sll  $s2, $s2, 2          #get offset of virtual register in memory
+addu $s2, $a0, $s2        #s2 now holds actual address of rs data
+                          #now sw $x, 0(s2) will store data in $x into rs reg
+lw   $s2, 0($s2)          #***s2 now holds rt data***
+
+
+bne $s1, $s2, afterNonjump  #if unequal, don't do anything
+#store potential jump address in t1
+sll   $t1, $s3, 2           # PC = PC + 4 + CONST*4
+addu  $t1, $t1, $a1
+addiu $t1, $t1, 4
+move $a1, $t1
+
+j execpc
+
+performBNE:
+sll  $s2, $s2, 2          #get offset of virtual register in memory
+addu $s2, $a0, $s2        #s2 now holds actual address of rs data
+                          #now sw $x, 0(s2) will store data in $x into rs reg
+lw   $s2, 0($s2)          #***s2 now holds rt data***
+
+
+beq $s1, $s2, afterNonjump  #if equal, don't do anything
+#store potential jump address in t1
+sll   $t1, $s3, 2           # PC = PC + 4 + CONST*4
+addu  $t1, $t1, $a1
+addiu $t1, $t1, 4
+move $a1, $t1
+
+j execpc
 
 #add the value in rs to the value of the immediate into t1
 and $t1, $s1, $s3
@@ -301,9 +402,15 @@ j afterNonjump
 # instructions should jump to afterRCompute when they have finished
 # their computations and want to store a value
 # should pass the value to store through $t1
+afterRCompute:
+  move $s2, $s3           #for r instructions, the virtual write register address
+
 afterICompute:
-afterRCompute:  
 #store the result in rt
+sll  $s2, $s2, 2          #get offset of virtual register in memory
+addu $s2, $a0, $s2        #***s2 now holds actual address of rs data***
+                          #now sw $x, 0(s2) will store data in $x into rs reg
+
 sw    $t1, 0($s2)         #t2 now holds actual rs data
 j afterNonjump
 
