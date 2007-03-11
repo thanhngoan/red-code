@@ -1,0 +1,238 @@
+README file for Programming Assignment 5  (Java edition)
+=======================================================
+
+Your directory should now contain the following files:
+
+ ASTConstants.java    -> [course dir]/src/PA5J/ASTConstants.java
+ ASTLexer.java	      -> [course dir]/src/PA5J/ASTLexer.java
+ ASTParser.java	      -> [course dir]/src/PA5J/ASTParser.java
+ AbstractSymbol.java  -> [course dir]/src/PA5J/AbstractSymbol.java
+ AbstractTable.java   -> [course dir]/src/PA5J/AbstractTable.java
+ BoolConst.java
+ Cgen.java	      -> [course dir]/src/PA5J/Cgen.java
+ CgenClassTable.java
+ CgenNode.java
+ CgenSupport.java
+ ClassTable.java      -> [course dir]/src/PA5J/ClassTable.java
+ Flags.java	      -> [course dir]/src/PA5J/Flags.java
+ IdSymbol.java	      -> [course dir]/src/PA5J/IdSymbol.java
+ IdTable.java	      -> [course dir]/src/PA5J/IdTable.java
+ IntSymbol.java
+ IntTable.java	      -> [course dir]/src/PA5J/IntTable.java
+ ListNode.java	      -> [course dir]/src/PA5J/ListNode.java
+ Makefile	      -> [course dir]/assignments/PA5J/Makefile
+ README
+ StringSymbol.java
+ StringTable.java     -> [course dir]/src/PA5J/StringTable.java
+ SymbolTable.java     -> [course dir]/src/PA5J/SymbolTable.java
+ SymtabExample.java   -> [course dir]/src/PA5J/SymtabExample.java
+ TokenConstants.java  -> [course dir]/src/PA5J/TokenConstants.java
+ TreeConstants.java
+ TreeNode.java        -> [course dir]/src/PA5J/TreeNode.java
+ Utilities.java	      -> [course dir]/src/PA5J/Utilities.java
+ cool-tree.aps	      -> [course dir]/src/PA5J/cool-tree.aps
+ cool-tree.java
+ example.cl
+
+	The Makefile contains targets for compiling and running your
+	program, as well as handing it in. DO NOT MODIFY.
+
+	The README contains this info. Part of the assignment is to
+	fill the README with the write-up for your project. You should
+	explain design decisions, explain why your code is correct,
+	and why your test cases are adequate. It is part of the
+	assignment to clearly and concisely explain things in text as
+	well as to comment your code. Just edit this file.
+
+	In example.cl you should write a correct Cool program which
+	tests as many aspects of the code generator as possible. It
+	should pass your code generator, and running spim on the
+	generated output should run the program correctly.
+
+	CgenClassTable.java CgenNode.java are the skeleton files for
+	the code generator. These skeletons are much larger than the
+	ones for previous assignments.  The skeletons provides three
+	components of the code generator:
+
+		- functions to build the inheritance graph; (we supply
+		  this in case you didn't get this working for PA4)
+
+		- functions to emit global data and constants;
+		 
+	You should work to understand this code, and it will help you
+        write the rest of the code generator.
+
+        TreeNode.java and ListNode.java contain definitions used by
+        the tree package. DO NOT MODIFY.
+
+        cool-tree.java specifies and give an implementation of Cool
+        ASTs (see the README for PA3 and the "Cool Tour").  In this
+        assignment, you will need to complete the code generating
+        methods for all Cool expression nodes.
+
+	BoolConst.java, IntSymbol.java, and StringSymbol.java are used
+        to manage constants in Cool programs.  You will need to
+        complete the method for generating constant definitions in
+        each of these classes.
+
+	CgenSupport.java is general support code for the code
+	generator.  You can add functions and constants as you see
+	fit, but do not modify anything that's already there.  This
+	class also serves as a placeholder for a bunch of constants as
+	well as functions to emit spim instructions (we supply these
+	to save you some tedious coding).
+
+	TreeConstants.java defined some useful symbol constants.  You
+	may add some of your own, if you wish.
+
+	ASTLexer.java, ASTParser.java, and ASTConstants.java implement
+	a lexer and a parser for reading text representation of ASTs
+	from console in the format produced by the parser phase. DO
+	NOT MODIFY.
+
+	Cgen.java supplies the driver for the compiler. You should not
+        modify this code.  The script mycoolc can pass any of the
+        standard flags to the code generator; for this assignment, -c
+        (code generator debug) may be useful as it sets a global
+        variable cgen_debug to true (1).  If you want your code
+        generator to print debug information when the option is set,
+        write your debug code in the following format:
+
+	      if (cgen_debug)
+	      {
+		...
+	      }
+
+	SymbolTable.java contains a symbol table implementation. Read
+	the comments in the file and look at the example in
+	SymtabExample.java.  You are not required to use this code,
+	but you may find it useful. DO NOT MODIFY.
+
+Instructions
+------------
+
+	To compile your compiler and code generator type:
+
+	% gmake cgen
+
+	To test your compiler, type:
+
+	% ./mycoolc [-o output filename] <file1.cl> <file2.cl> ...
+
+	This command parses all the cool files given on the command
+	line, passes them through the semantic checker, and then hands
+	the program AST to your code generator.
+
+	To run your compiler on the file example.cl, type:
+
+	% gmake dotest
+
+	To run the produced code:
+
+	% spim -file file1.s  /* or the output filename you chose */
+	
+	To turnin your work type:
+
+	% gmake submit-clean
+
+	And run the "submit" program following the instructions on the
+	course web page.
+	
+ 	You may turn in the assignment as many times as you like.
+ 	However, only the last version will be retained for grading.
+
+	If you change architectures you must issue
+
+	% gmake clean
+
+	when you switch from one type of machine to the other.  If at
+	some point you get weird errors from the linker, you probably
+	forgot this step.
+
+	GOOD LUCK!
+
+---8<------8<------8<------8<---cut here---8<------8<------8<------8<---
+
+Write-up for PA5
+----------------
+I have written a fairly unsophisticated code generator for COOL.  It uses simple
+and wasteful methods to generate MIPS instructions by passing over the AST in
+a recursive descent manner.
+
+The code generation takes place in a few steps and phases.  First, the data portion
+of the program is filled in with the class name table (that maps class ids to COOL 
+string constants), the prototype objects (blocks of data that are copied to initialize
+any COOL object), and dispatch tables (tables for looking up the method given the
+runtime type of a class).  In order to do this, the inheritance graph is first traversed
+to assign indices to each class, later used to unique identify and index classes.  Most
+of the procedures in this phase rely on list of attributes/methods in some canonical order,
+which is computed determinisitically by each class (i.e. the attributes/methods of the Object class
+are first, then the subclass' attributes/methods, all the way down the tree; overridden methods
+replace parent entries in the dispatch table).
+
+After the data portion is generated, the fun begins with procedural code generation.  There
+are two primary concerns when translating the operational semantics: ensuring that the static 
+environment is correctly represented, and correctly managing runtime memory.  In order to
+generate code for identifiers, the static environment must be able to statically determine
+the location in memory of attribute, let, and parameter bindings in addition to method bindings.
+That is accomplished in the following manner:
+ *attribute bindings are determined by using the canonical index of the attribute in the object
+  record of the current class context.
+ *parameter bindings are stored relative to the stack frame in a easily trackable manner since
+ there can be no stack increment between the time they are bound and the method invocation.  Params
+ are stored with the later arguments at the higher addresses, i.e. for a method m(p1, p2, p3) the
+ frame will be (fp - 4): previous fp, (fp - 8): p3, (fp - 12): p2, (fp - 16): p3.
+ *let bindings are stored relative to the current frame pointer.  This is accomplished by keeping
+ track of the increments done to $sp by the code generator.  For example, consider the following
+ COOL: class A { meth() : Int { let x : Int, y : Int in y } };
+ 	When the code generator generates code for meth(), it will require a certain number of bytes
+ 	on the stack to store the method frame, say 12 bytes.  Upon entering the let x, 4 more bytes
+ 	will be required to store the value of x.  Finally, 4 more bytes will be needed for the y
+ 	binding.  The bindings for x and y are thus (FP - 16) and (FP - 20) respectively.
+
+Static method bindings are determined by directly pointing the class's method definition.
+Dynamic method bindings are determined by looking up the method in the dispatch table of the
+object's class.
+
+Most of this functionality is implemented in the CompilationEnvironment class, which keeps
+track of stack depth during code generation, if properly used.  It contains several utility
+methods for help with code generation.
+
+Object initialization is the other tricky part of implementation.  Each object has a label
+called `classname_init' that corresponds to its initialization procedure.  After an object
+has been copied into a new memory location with Object.copy and the prototype object pointer
+in the $a0 register, this segment of code is called.  It will not modify $a0 and will
+follow the semantics specified in the `new' operational semantics.  The init procedure
+is fairly fairly tricky because it is has similar semantics to method definitions.
+The prototype objects already provide the default values for each attribute.  Next,
+the superclass's initialization procedure is called. Finally, Each
+attribute initialization expression is evaluated in the order of declaration in
+a static environment with the current class as its context class, and the newly
+initialized object is returned.
+
+Verifying the correctness of generated code.
+================================================
+In order to ensure that the generated code was correct, a number of informal steps were
+taken: debugging, incremental testing, unit testing, and code coverage
+
+Debugging was assisted by hard-coding comments into the generated assembly so it was
+easier to make sense of generated code.  (This is also helpful for developers who wish
+to review the generated instructions from a program, and is done in other compilers like SBCL.)
+SPIM and XSPIM were not helpful for debugging the generated assmebly code except for
+things like missing labels and global references.  Stepping through the program was
+also tedious because of my programming environment.
+
+Incremental testing is the only way to get a large software project like this working.
+I implemented bits and pieces at a time, and verified that test programs returned
+the expected integer value with each newly implemented feature.
+
+Unit tsting was implemented as a ruby script later in development to ensure that
+COOL programs outputted the expected values.  IO.out_* were used to output values.
+Runtime outputs were compared to expected values and errors were reported for
+conflicts.
+
+The example.cl file attempts to cover all the procedural code generated by 
+
+
+Comments
+===============================================

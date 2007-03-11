@@ -1,0 +1,43 @@
+#3
+_program
+  #3
+  _class
+    Main
+    Object
+    "example.cl"
+    (
+    #2
+    _method
+      main
+      Int
+      #2
+      _let
+        io
+        IO
+        #2
+        _new
+          IO
+        : IO
+        #2
+        _block
+          #2
+          _dispatch
+            #2
+            _object
+              io
+            : IO
+            out_string
+            (
+            #2
+            _string
+              "hello\n"
+            : String
+            )
+          : IO
+          #2
+          _int
+            0
+          : Int
+        : Int
+      : Int
+    )
