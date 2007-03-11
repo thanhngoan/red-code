@@ -431,11 +431,11 @@ class CgenClassTable extends SymbolTable {
 	if (Flags.cgen_debug) System.out.println("coding constants");
 	codeConstants(); 
 	
-	env = new CompliationEnvironment();
-	env.ctable = this;
+	env = new CompliationEnvironment(this, null);
 
 	// emit important data
 	emitClassNameTable();
+	emitInheritanceTable();
 	emitPrototypeObjects();
 	emitDispatchTables();
 
@@ -512,6 +512,22 @@ class CgenClassTable extends SymbolTable {
 			str.print(CgenSupport.WORD);
 			StringSymbol name = findStringSymbol(node.getName().toString());
 			name.codeRef(str);
+			str.println("");
+		}	
+	}
+	
+
+	private void emitInheritanceTable() {
+		comment("Name Lookup table for classes (index is class identifier)");
+		str.print("\t .globl InheritanceTable\n");
+		str.print("InheritanceTable" + CgenSupport.LABEL);
+		for (CgenNode node : nds)
+		{
+			str.print("\t");
+			comment("Lookup for " + node.getName().toString());
+			str.print(CgenSupport.WORD);
+			int parentId = node.getParentNd() == null ? 0 : node.getParentNd().classTag;
+			str.println(parentId);
 			str.println("");
 		}	
 	}

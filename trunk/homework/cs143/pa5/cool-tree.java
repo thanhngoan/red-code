@@ -10,7 +10,11 @@
 
 import java.util.Collection;
 import java.util.Enumeration;
+import java.util.HashMap;
+import java.util.Iterator;
 import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
 import java.io.PrintStream;
 import java.util.Vector;
 
@@ -173,6 +177,16 @@ class Formals extends ListNode {
     public TreeNode copy() {
         return new Formals(lineNumber, copyElements());
     }
+    
+    public Collection<formal> asCollection()
+    {
+    	Collection<formal> coll = new LinkedList<formal>();
+    	
+    	Enumeration enumer = getElements();
+    	while (enumer.hasMoreElements())
+    		coll.add( (formal)enumer.nextElement());
+    	return coll;
+    }
 }
 
 
@@ -194,7 +208,7 @@ abstract class Expression extends TreeNode {
     public abstract void code(PrintStream s);
 	public String getCode(CompliationEnvironment env) {
 		// TODO Auto-generated method stub
-		return " # ERROR -- some undefined expression\n";
+		return " # ERROR -- some undefined expression " + this.getClass().toString() + "\n";
 	}
 
 }
@@ -223,6 +237,17 @@ class Expressions extends ListNode {
     }
     public TreeNode copy() {
         return new Expressions(lineNumber, copyElements());
+    }
+    
+
+    public Collection<Expression> asCollection()
+    {
+    	Collection<Expression> coll = new LinkedList<Expression>();
+    	
+    	Enumeration enumer = getElements();
+    	while (enumer.hasMoreElements())
+    		coll.add( (Expression)enumer.nextElement());
+    	return coll;
     }
 }
 
@@ -260,6 +285,16 @@ class Cases extends ListNode {
     }
     public TreeNode copy() {
         return new Cases(lineNumber, copyElements());
+    }
+    
+    public Collection<branch> getBranches()
+    {
+    	Collection<branch> coll = new LinkedList<branch>();
+    	
+    	Enumeration enumer = getElements();
+    	while (enumer.hasMoreElements())
+    		coll.add( (branch)enumer.nextElement());
+    	return coll;
     }
 }
 
@@ -393,80 +428,6 @@ class class_ extends Class_ {
 
 }
 
-class CompliationEnvironment {
-	public CgenClassTable ctable;
-	public CgenNode classdef;
-	
-	public int labelCount = 0;
-	
-
-
-    public String evalExpressionsIntoRegisters(Expression[] expressions, String[] registers) {
-		String result = "";
-		
-		int requiredStackSize = expressions.length * 4 + 4;
-		result += "\t addi $sp, $sp, -" + requiredStackSize + "  # push stack for multiple expression evaluation\n";
-		result += "\t sw $ra, " + (requiredStackSize - 4) + "($sp)     # store ra \n";
-		
-		//compute expressions
-		for (int i=0; i < expressions.length; i++) {
-			result += expressions[i].getCode(this);
-			result += "\t sw $a0, " + i *4 +"($sp)     # store expression\n";
-		}
-		// restore expressions
-		for (int i=0; i < expressions.length; i++) {
-			result += "\t lw " + registers[i] +", " + i *4 +"($sp)     # load results into register results \n";
-		}
-		result += "\t lw $ra, " + (requiredStackSize - 4) + "($sp)     # restore ra after multiple expression evaluation \n";
-		result += "\t addi $sp, $sp, " + requiredStackSize + "  # pop stack\n";
-		return result;
-	}
-    
-    public String codePushRAOnStack() {
-    	String result = "";
-		result += "\t addi $sp, $sp, -8  # push stack to store RA\n";
-		result += "\t sw   $ra, 4($sp)  # \n";
-		return result;
-    }
-    
-    public String codeRestoreRA() {
-    	String result = "";
-		result += "\t lw   $ra, 4($sp)  # \n";
-		result += "\t addi $sp, $sp, 8  # restore RA\n";
-		return result;
-    }
-    
-    public String codeStackPush(int bytes) {
-    	return "\t addi $sp, $sp, " + bytes + " \n";
-    }
-    
-    public String codeStackPop(int bytes) {
-    	return "\t addi $sp, $sp, -" + bytes + " \n";
-    }
-    
-    public String genLabel(String hint) { return hint + "_" + labelCount++; }
-
-	public String codeSetBoolPointer(String valueRegister, String outRegister) {
-		String trueRef  = BoolConst.truebool.getCodeRef(),
-    	       falseRef = BoolConst.falsebool.getCodeRef();
-		String falseLabel = genLabel("IsFalse");
-		String trueLabel = genLabel("IsTrue");
-		String afterLabel = genLabel("AfterBoolSet");
-    	String result = "";
-		result += "\t beq $t0, $zero, " + falseLabel + "\n";
-		result += "\t la "+ outRegister + ", " + trueRef + "\n";
-		result += "\t j " + afterLabel + "\n";
-		result += "\t " + falseLabel + CgenSupport.LABEL + "\n";
-		result += "\t la "+ outRegister + ", " + falseRef + "\n";
-		result += "\t " + afterLabel + CgenSupport.LABEL + "\n";
-		result += "\t " + afterLabel + CgenSupport.LABEL + "\n";
-		//result += "\t jal Object.copy    # Create a new integer that's a copy of the second argument \n";
-		return result;
-	}
-	
-	
-}
-
 
 /** Defines AST constructor 'method'.
     <p>
@@ -528,11 +489,32 @@ class method extends Feature {
      */
 	public String getCode(CompliationEnvironment env) {
 		String result = "";
-		int frameSize = 4 + getArity()*4;
+		
+		int frameSize = 8 + getArity()*4;
 		//labeling
 		String label = env.classdef.name + "." + this.name;
 		result += CgenSupport.GLOBAL + label + "\n";
 		result += label + CgenSupport.LABEL;
+		
+		int nonArgumentFrameBytes = 4;
+		int popStackAmount = nonArgumentFrameBytes + formals.getLength() * 4;
+
+		result += "\t addi $fp, $sp, " + ( frameSize + 4 )+ "\n";
+    	result += env.codeStackPush(nonArgumentFrameBytes);
+		result += "\t sw $ra,  4($sp) # store ra on stack\n"; 
+		
+		result += "\t move $s0, $a0 \n";
+		
+
+    	//evaluate body
+    	result += expr.getCode(env);
+
+		//pop frame
+    	result += "\t lw $ra,  4($sp) # load back ra \n";
+    	result += env.codeStackPop(popStackAmount); //(popStackAmount);
+    	result += "\t jr $ra\n";
+    	
+		/*
 		
 		result += "\t addi $sp, $sp, -4 # push stack to store $ra\n";
 		result += "\t sw $ra, 4($sp)    # store ra \n";
@@ -557,8 +539,25 @@ class method extends Feature {
     	result += "\t" + "addi   $sp, $sp, 8\n";
 		
 		result += "\t jr $ra \n";
-		
+		*/
 		return result;
+		/* 
+		int nonArgumentFrameBytes = 8;
+		int stackSize = canonicalAttributesList().size() * 4 + nonArgumentFrameBytes;
+    	str.println("\t sw $fp,  -4($sp) # store frame pointer in top-most portion of stack");
+    	str.println("\t move $sp,   $fp");
+    	str.println("\t addi $sp, $sp, -" + stackSize);
+		env.enterFrame();
+		env.codeStackPush(stackSize);
+		for (int i=0; i < canonicalAttributesList().size(); i++) {
+	    	str.println("\t lw $t0, $sp, -" + stackSize);
+			// bind all attributes
+	    	str.print(env.codeAndBind(
+	    			i *-4  - nonArgumentFrameBytes ,
+	    			canonicalAttributesList().get(i).name,
+	    			"$fp"));
+		}
+		*/
 	}
 	
 	public int getArity() {
@@ -755,6 +754,31 @@ class assign extends Expression {
       * */
     public void code(PrintStream s) {
     }
+    
+
+
+    public String getCode(CompliationEnvironment env) {
+    	String result = "";
+    	
+    	result += expr.getCode(env);
+    	
+    	CompliationEnvironment.Binding localBinding = env.getBinding(name);
+    	if (localBinding != null)
+    	{
+    		result += "\t#Local binding for " + name + " set to something else \n";
+    		result += "\t sw $a0, " + localBinding.fpOffset + "($fp)\n";
+    	}
+    	else {
+    		int attribOffset = env.classdef.getAttributeOffset(name);
+    		if (attribOffset >= 0) {
+        		result += "\t#Attribute binding for " + name + " \n";
+        		result += "\t sw $a0, " + attribOffset + "($s0)\n";
+    		} else {
+        		result += "\t#ERROR NO BINDING for " + name + " \n";
+    		}
+    	}
+    	return result;
+	}
 
 }
 
@@ -814,6 +838,69 @@ class static_dispatch extends Expression {
       * */
     public void code(PrintStream s) {
     }
+    
+
+    
+    /**
+     * Function calling uses the following conventions.  They CALLER has
+     * the responsibility of decrementing the stack and pushing the arguments onto it.
+     * (Each argument is a one-word pointer.)
+     * The CALLEE has the responsibility of incrementing the stack after the
+     * method call has completed, as per the built-in methods.
+     * Activation record looks like this:
+     * previous frame pointer 
+     * @param ctable
+     * @param context class in which the method is defined
+     * @return
+     */
+	public String getCode(CompliationEnvironment env) {
+		String result = "";
+		Collection<Expression> expressions = actual.asCollection();
+		method meth = env.ctable.getClassNode(type_name).getMethodByName(name);
+		Collection<formal> formals = meth.formals.asCollection();
+		String dispatchLabel = type_name + "." + name;
+		//labeling
+		
+		
+		int nonArgumentFrameBytes = 8;
+		int pushAmount = nonArgumentFrameBytes + expressions.size()*4;
+    	
+		//result += "\t sw $ra,  0($sp) # store ra on stack\n";
+    	result += "\t sw $fp, 0($sp) # store FP at the tip top of the Activation Record \n";
+    	result += "\t sw $s0, -4($sp) # store $ra so in AR at fp - 4 \n";
+		env.enterFrame();
+    	result += env.codeStackPush(pushAmount);
+    	//result += "\t move  $fp,  $sp # set fp for the sake of the dispatch \n";
+
+    	//add formals bindings
+    	int offsetFromFP = -8;
+    	int offsetFromSP = formals.size() * 4;
+    	Iterator<formal> iformal = formals.iterator();
+    	for (Expression arg : expressions) {
+    		formal frm = iformal.next();
+    		//formal arg = (formal) formals.getNth(i);
+	    	//str.println("\t lw $t0, $sp, -" + stackSize);
+			// bind all attributes
+        	result += arg.getCode(env);
+        	result += "\t sw $a0,  " + offsetFromSP + "($sp) # store evaluated parameter on stack \n";
+	    	env.pushLocalBinding( offsetFromFP , frm.name);
+	    	//each parameter gets 4 bytes closer to FP and 4 bytes away from SP
+	    	offsetFromFP += 4;
+	    	offsetFromSP -= 4;
+		}
+
+		result += expr.getCode(env);
+
+    	result += "\t move $s0, $a0 \n";
+    	
+    	result += "\t jal " + dispatchLabel + " # dispatch the method \n";
+
+    	result += "\t lw $s0,    4($sp) # load back ra \n";
+    	result += "\t lw $fp,    8($sp) # load back fp \n"; //TODO
+    	result += env.codeStackPop(nonArgumentFrameBytes);
+    	
+		return result;
+	}
 
 
 }
@@ -869,7 +956,56 @@ class dispatch extends Expression {
       * */
     public void code(PrintStream s) {
     }
+    
+    /*
+    
 
+	public String getCode(CompliationEnvironment env) {
+		String result = "";
+		Collection<Expression> expressions = actual.asCollection();
+		method meth = env.ctable.getClassNode(type_name).getMethodByName(name);
+		Collection<formal> formals = meth.formals.asCollection();
+		String dispatchLabel = type_name + "." + name;
+		//labeling
+		
+		int nonArgumentFrameBytes = 8;
+		int pushAmount = nonArgumentFrameBytes + expressions.size()*4;
+    	
+		//result += "\t sw $ra,  0($sp) # store ra on stack\n";
+    	result += "\t sw $fp, 0($sp) # store FP at the tip top of the Activation Record \n";
+    	result += "\t sw $ra, -4($sp) # store $ra so in AR at fp - 4 \n";
+		env.enterFrame();
+    	result += env.codeStackPush(pushAmount);
+    	//result += "\t move  $fp,  $sp # set fp for the sake of the dispatch \n";
+
+    	//add formals bindings
+    	int offsetFromFP = -8;
+    	int offsetFromSP = formals.size() * 4;
+    	Iterator<formal> iformal = formals.iterator();
+    	for (Expression arg : expressions) {
+    		formal frm = iformal.next();
+    		//formal arg = (formal) formals.getNth(i);
+	    	//str.println("\t lw $t0, $sp, -" + stackSize);
+			// bind all attributes
+        	result += arg.getCode(env);
+        	result += "\t sw $a0,  " + offsetFromSP + "($sp) # store evaluated parameter on stack \n";
+	    	env.pushLocalBinding( offsetFromFP , frm.name);
+	    	//each parameter gets 4 bytes closer to FP and 4 bytes away from SP
+	    	offsetFromFP += 4;
+	    	offsetFromSP -= 4;
+		}
+    	
+    	//result += "\t "
+    	
+    	result += "\t jal " + dispatchLabel + " # dispatch the method \n";
+
+    	result += "\t lw $s0,    4($sp) # load back ra \n";
+    	result += "\t lw $fp,    8($sp) # load back fp \n"; //TODO
+    	result += env.codeStackPop(nonArgumentFrameBytes);
+    	
+		return result;
+	}
+	*/
 
 }
 
@@ -920,6 +1056,28 @@ class cond extends Expression {
       * */
     public void code(PrintStream s) {
     }
+    
+
+
+    public String getCode(CompliationEnvironment env) {
+		String result = "";
+		//labeling
+		String falseLabel = env.genLabel("IsFalse");
+		String afterLabel = env.genLabel("AfterBoolSet");
+
+		result += pred.getCode(env);
+		result += "\t lw $t0, 12($a0)\n";
+		result += "\t beq $t0, $zero, " + falseLabel + "\n";
+		
+		result += then_exp.getCode(env);
+		result += "\t j " + afterLabel + "\n";
+		
+		result += "\t " + falseLabel + CgenSupport.LABEL + "\n";
+		result += else_exp.getCode(env);
+		
+		result += "\t " + afterLabel + CgenSupport.LABEL + "\n";
+		return result;
+	}
 
 
 }
@@ -966,6 +1124,25 @@ class loop extends Expression {
       * */
     public void code(PrintStream s) {
     }
+    
+
+    public String getCode(CompliationEnvironment env) {
+		String result = "";
+		//labeling
+		String testLabel = env.genLabel("Test");
+		String afterLabel = env.genLabel("AfterBoolSet");
+
+		result += "\t " + testLabel + CgenSupport.LABEL + "\n";
+		result += pred.getCode(env);
+		result += "\t lw $t0, 12($a0)\n";
+		result += "\t beq $t0, $zero, " + afterLabel + "\n";
+		//body
+		result += body.getCode(env);
+		result += "\t j " + testLabel + "\n";
+		
+		result += "\t " + afterLabel + CgenSupport.LABEL + "\n";
+		return result;
+	}
 
 
 }
@@ -1014,6 +1191,63 @@ class typcase extends Expression {
       * */
     public void code(PrintStream s) {
     }
+    
+
+    public String getCode(CompliationEnvironment env) {
+		String result = "";
+		//labeling
+		String afterLabel = env.genLabel("endcase");
+		String loopLabel = env.genLabel("startcasetesting");
+		Map<branch, String> labelMap = new HashMap<branch, String>();
+		for (branch br : cases.getBranches())
+			labelMap.put(br, env.genLabel(br.type_decl.toString()));
+		
+
+		result += env.codeStackPush(4);
+		
+		result += expr.getCode(env);
+		int offsetFromFP = env.getFPOffset();
+    	result += "\t sw $a0,  " + offsetFromFP + "($fp) # store evaluated parameter on stack \n";
+    	
+		result += "\t beq $a0, $zero, _case_abort2 # case on void\n";
+		result += "\t lw $t0, 0($a0) # load class tag into $t0\n";
+		result += "\t la $t1, InheritanceTable # load class tag into $t0\n";
+
+		result += "\t " + loopLabel + CgenSupport.LABEL;
+		
+		result += "\t beq $t0, $zero, _case_abort # when we get to a null parent we have tested all branches\n";
+		for (branch br : cases.getBranches())
+		{
+			int tag = env.ctable.getClassNode(br.type_decl).classTag;
+			result += "\t beq $t0, " + tag + "," + labelMap.get(br)+ " # when we get to a null parent we have tested all branches\n";
+			//result += "\t beq $t0, " + br.name + "," + labelMap.get(br)+ " # when we get to a null parent we have tested all branches\n";
+		}
+		
+		result += "\t add $t0, $t0, $t1 # load class tag into $t0\n";
+		result += "\t lw  $t0, 0($t0) # load class tag into $t0\n";
+		result += "\t j " + loopLabel + "\n";
+		
+		//now see if this matches any of the cases match.  this is done
+		//by walking up the class inheritance graph starting with classOf(expr)
+		//if none is found then signal an error
+		
+		for (branch br : cases.getBranches())
+		{
+
+	    	env.pushLocalBinding( offsetFromFP , br.name);
+	    	
+			result += "\t " + labelMap.get(br) + CgenSupport.LABEL;
+			result += br.expr.getCode(env);
+			result += "\t j " + afterLabel + "\n";
+
+	    	env.popLocalBinding();
+		}
+
+		result += "\t " + afterLabel + CgenSupport.LABEL;
+		result += env.codeStackPop(4);
+		
+		return result;
+	}
 
 
 }
@@ -1057,6 +1291,33 @@ class block extends Expression {
       * */
     public void code(PrintStream s) {
     }
+    
+
+    public String getCode(CompliationEnvironment env) {
+    	/*
+		String result = "";
+		//result += env.codePushRAOnStack();
+		//labeling
+		result += env.evalExpressionsIntoRegisters(new Expression[] { e1, e2 }, new String[] { "$t3", "$a0" });
+		result += "\t jal Object.copy    # Create a new integer that's a copy of the second argument \n";
+
+		result += "\t lw $t1, 12($t3)    # decode integers\n";
+		result += "\t lw $t2, 12($a0)    \n";
+
+		result += "\t add $t0, $t1, $t2  # result of addition in $t0\n";
+		result += "\t sw  $t0, 12($a0)   # store result in new integer \n";
+		result += "\t move $a0, int_const0  # result of addition in $t0\n";
+
+		//result += env.codeRestoreRA();
+		return result;
+		*/
+		String result = "";
+		//labeling
+		
+		for (Expression expr : body.asCollection())
+			result += expr.getCode(env);
+		return result;
+	}
 
 
 }
@@ -1114,6 +1375,34 @@ class let extends Expression {
     public void code(PrintStream s) {
     }
 
+    public String getCode(CompliationEnvironment env) {
+		String result = "";
+
+		// eval the form
+		if (init == null || init instanceof no_expr)
+		{
+			result += "\t la $a0, " + type_decl + CgenSupport.PROTOBJ_SUFFIX + "\n";
+			result += "\t jal Object.copy \n";
+		}
+		else
+		{
+			result += init.getCode(env);
+		}
+
+		//get a new binding
+		result += "";
+		result += env.codeStackPush(4);
+		int offsetFromFP = env.getFPOffset();
+    	result += "\t sw $a0,  " + offsetFromFP + "($fp) # store evaluated parameter on stack \n";
+    	env.pushLocalBinding( offsetFromFP , identifier);
+    	
+    	result += body.getCode(env);
+    	
+    	env.popLocalBinding();
+		result += env.codeStackPop(4);
+		return result;
+	}
+
 
 }
 
@@ -1161,29 +1450,13 @@ class plus extends Expression {
     }
 
     public String getCode(CompliationEnvironment env) {
-    	/*
-		String result = "";
-		//result += env.codePushRAOnStack();
-		//labeling
-		result += env.evalExpressionsIntoRegisters(new Expression[] { e1, e2 }, new String[] { "$t3", "$a0" });
-		result += "\t jal Object.copy    # Create a new integer that's a copy of the second argument \n";
-
-		result += "\t lw $t1, 12($t3)    # decode integers\n";
-		result += "\t lw $t2, 12($a0)    \n";
-
-		result += "\t add $t0, $t1, $t2  # result of addition in $t0\n";
-		result += "\t sw  $t0, 12($a0)   # store result in new integer \n";
-		result += "\t move $a0, int_const0  # result of addition in $t0\n";
-
-		//result += env.codeRestoreRA();
-		return result;
-		*/
 		String result = "";
 		//labeling
+
+		result += env.codeStackPush(4);
+		
 		result += e1.getCode(env);
-		result += "\t addi $sp, $sp, -8  # push stack for addition\n";
-		result += "\t sw $ra, 8($sp)     # store first result \n";
-		result += "\t sw $a0, 4($sp)     # store ra \n";
+		result += "\t sw $a0, 4($sp)     # store first result \n";
 		
 		result += e2.getCode(env);
 		result += "\t jal Object.copy    # Create a new integer that's a copy of the second argument \n";
@@ -1191,12 +1464,11 @@ class plus extends Expression {
 		result += "\t lw $t1, 4($sp)     # load back first result after method\n";
 		result += "\t lw $t1, 12($t1)    # decode integers\n";
 		result += "\t lw $t2, 12($a0)    \n";
-		
+	
 		result += "\t add $t0, $t1, $t2  # result of addition in $t0\n";
-		result += "\t sw  $t0, 12($a0)   # store result in new integer \n";
+		result += "\t sw  $t0, 12($a0)   # store result in new integer \n";	
 
-		result += "\t lw $ra, 8($sp)     # restore ra after addition \n";
-		result += "\t addi $sp, $sp, 8   # pop stack after addition\n";
+		result += env.codeStackPop(4);
 		return result;
 	}
 
@@ -1246,12 +1518,11 @@ class sub extends Expression {
     }
 
     public String getCode(CompliationEnvironment env) {
-		String result = "";
-		//labeling
+    	String result = "";
+		result += env.codeStackPush(4);
+		
 		result += e1.getCode(env);
-		result += "\t addi $sp, $sp, -8  # push stack for addition\n";
-		result += "\t sw $ra, 8($sp)     # store first result \n";
-		result += "\t sw $a0, 4($sp)     # store ra \n";
+		result += "\t sw $a0, 4($sp)     # store first result \n";
 		
 		result += e2.getCode(env);
 		result += "\t jal Object.copy    # Create a new integer that's a copy of the second argument \n";
@@ -1259,12 +1530,11 @@ class sub extends Expression {
 		result += "\t lw $t1, 4($sp)     # load back first result after method\n";
 		result += "\t lw $t1, 12($t1)    # decode integers\n";
 		result += "\t lw $t2, 12($a0)    \n";
-		
+	
 		result += "\t sub $t0, $t1, $t2  # result of addition in $t0\n";
-		result += "\t sw  $t0, 12($a0)   # store result in new integer \n";
+		result += "\t sw  $t0, 12($a0)   # store result in new integer \n";	
 
-		result += "\t lw $ra, 8($sp)     # restore ra after addition \n";
-		result += "\t addi $sp, $sp, 8   # pop stack after addition\n";
+		result += env.codeStackPop(4);
 		return result;
 	}
 
@@ -1313,14 +1583,34 @@ class mul extends Expression {
       * */
     public void code(PrintStream s) {
     }
+    
+
 
     public String getCode(CompliationEnvironment env) {
+    	/*
+		String result = "";
+		//result += env.codePushRAOnStack();
+		//labeling
+		result += env.evalExpressionsIntoRegisters(new Expression[] { e1, e2 }, new String[] { "$t3", "$a0" });
+		result += "\t jal Object.copy    # Create a new integer that's a copy of the second argument \n";
+
+		result += "\t lw $t1, 12($t3)    # decode integers\n";
+		result += "\t lw $t2, 12($a0)    \n";
+
+		result += "\t add $t0, $t1, $t2  # result of addition in $t0\n";
+		result += "\t sw  $t0, 12($a0)   # store result in new integer \n";
+		result += "\t move $a0, int_const0  # result of addition in $t0\n";
+
+		//result += env.codeRestoreRA();
+		return result;
+		*/
 		String result = "";
 		//labeling
+
+		result += env.codeStackPush(4);
+		
 		result += e1.getCode(env);
-		result += "\t addi $sp, $sp, -8  # push stack for division\n";
-		result += "\t sw $ra, 8($sp)     # store first result \n";
-		result += "\t sw $a0, 4($sp)     # store ra \n";
+		result += "\t sw $a0, 4($sp)     # store first result \n";
 		
 		result += e2.getCode(env);
 		result += "\t jal Object.copy    # Create a new integer that's a copy of the second argument \n";
@@ -1328,13 +1618,13 @@ class mul extends Expression {
 		result += "\t lw $t1, 4($sp)     # load back first result after method\n";
 		result += "\t lw $t1, 12($t1)    # decode integers\n";
 		result += "\t lw $t2, 12($a0)    \n";
+	
 
 		result += "\t mult $t1, $t2   # result of division in $t0\n";
 		result += "\t mflo $t0        # result of multiplication in $t0\n";
-		result += "\t sw  $t0, 12($a0)    # store result in new integer \n";
+		result += "\t sw  $t0, 12($a0)   # store result in new integer \n";	
 
-		result += "\t lw $ra, 8($sp)     # restore ra after addition \n";
-		result += "\t addi $sp, $sp, 8   # pop stack after addition\n";
+		result += env.codeStackPop(4);
 		return result;
 	}
 
@@ -1383,14 +1673,17 @@ class divide extends Expression {
       * */
     public void code(PrintStream s) {
     }
+    
+
 
     public String getCode(CompliationEnvironment env) {
 		String result = "";
 		//labeling
+
+		result += env.codeStackPush(4);
+		
 		result += e1.getCode(env);
-		result += "\t addi $sp, $sp, -8  # push stack for division\n";
-		result += "\t sw $ra, 8($sp)     # store first result \n";
-		result += "\t sw $a0, 4($sp)     # store ra \n";
+		result += "\t sw $a0, 4($sp)     # store first result \n";
 		
 		result += e2.getCode(env);
 		result += "\t jal Object.copy    # Create a new integer that's a copy of the second argument \n";
@@ -1398,12 +1691,13 @@ class divide extends Expression {
 		result += "\t lw $t1, 4($sp)     # load back first result after method\n";
 		result += "\t lw $t1, 12($t1)    # decode integers\n";
 		result += "\t lw $t2, 12($a0)    \n";
-		
-		result += "\t div $t0, $t1, $t2   # result of division in $t0\n";
-		result += "\t sw  $t0, 12($a0)    # store result in new integer \n";
+	
 
-		result += "\t lw $ra, 8($sp)     # restore ra after addition \n";
-		result += "\t addi $sp, $sp, 8   # pop stack after addition\n";
+		//result += "\t beq $t2, $zero, $t2   # result of division in $t0\n";
+		result += "\t div $t0, $t1, $t2   # result of division in $t0\n";
+		result += "\t sw  $t0, 12($a0)   # store result in new integer \n";	
+
+		result += env.codeStackPop(4);
 		return result;
 	}
 
@@ -1506,14 +1800,15 @@ class lt extends Expression {
       * */
     public void code(PrintStream s) {
     }
-
+    
     public String getCode(CompliationEnvironment env) {
 		String result = "";
 		//labeling
+
+		result += env.codeStackPush(4);
+		
 		result += e1.getCode(env);
-		result += "\t addi $sp, $sp, -8  # push stack for division\n";
-		result += "\t sw $ra, 8($sp)     # store first result \n";
-		result += "\t sw $a0, 4($sp)     # store ra \n";
+		result += "\t sw $a0, 4($sp)     # store first result \n";
 		
 		result += e2.getCode(env);
 		result += "\t jal Object.copy    # Create a new integer that's a copy of the second argument \n";
@@ -1521,15 +1816,14 @@ class lt extends Expression {
 		result += "\t lw $t1, 4($sp)     # load back first result after method\n";
 		result += "\t lw $t1, 12($t1)    # decode integers\n";
 		result += "\t lw $t2, 12($a0)    \n";
-		
+	
+
 		result += "\t slt $t0, $t1, $t2   # result of division in $t0\n";
 		result += env.codeSetBoolPointer("$t0", "$a0");
 
-		result += "\t lw $ra, 8($sp)     # restore ra after addition \n";
-		result += "\t addi $sp, $sp, 8   # pop stack after addition\n";
+		result += env.codeStackPop(4);
 		return result;
 	}
-
 
 }
 
@@ -1579,10 +1873,9 @@ class eq extends Expression {
     public String getCode(CompliationEnvironment env) {
 		String result = "";
 		//labeling
+		result += env.codeStackPush(4);
 		result += e1.getCode(env);
-		result += "\t addi $sp, $sp, -12  # push stack for division\n";
-		result += "\t sw $ra, 8($sp)     # store first result \n";
-		result += "\t sw $a0, 4($sp)     # store ra \n";
+		result += "\t sw $a0, 4($sp)     # store first result \n";
 		
 		result += e2.getCode(env);
 
@@ -1599,12 +1892,24 @@ class eq extends Expression {
 		}
 		else
 		{
-			result += "\t la $a1, " + BoolConst.falsebool.getCodeRef() + "     # false \n";
+
+			//TODO handle void
+			String trueRef  = BoolConst.truebool.getCodeRef(),
+	    	       falseRef = BoolConst.falsebool.getCodeRef();
+			String falseLabel = env.genLabel("IsFalse");
+			String afterLabel = env.genLabel("AfterBoolSet");
+
+			result += "\t bne $t1, $t2, " + falseLabel + "\n";
+			result += "\t la $a0, " + trueRef + "\n";
+			result += "\t j " + afterLabel + "\n";
+			result += "\t " + falseLabel + CgenSupport.LABEL + "\n";
+			result += "\t la $a0, " + falseRef + "\n";
+			result += "\t " + afterLabel + CgenSupport.LABEL + "\n";
+			
 			//result += env.codeSetBoolPointer("$t0", "$a0");
 		}
 
-		result += "\t lw $ra, 8($sp)     # restore ra after addition \n";
-		result += "\t addi $sp, $sp, 12   # pop stack after addition\n";
+		result += env.codeStackPop(4);
 		return result;
 	}
 
@@ -1658,10 +1963,11 @@ class leq extends Expression {
     public String getCode(CompliationEnvironment env) {
 		String result = "";
 		//labeling
+
+		result += env.codeStackPush(4);
+		
 		result += e1.getCode(env);
-		result += "\t addi $sp, $sp, -8  # push stack for division\n";
-		result += "\t sw $ra, 8($sp)     # store first result \n";
-		result += "\t sw $a0, 4($sp)     # store ra \n";
+		result += "\t sw $a0, 4($sp)     # store first result \n";
 		
 		result += e2.getCode(env);
 		result += "\t jal Object.copy    # Create a new integer that's a copy of the second argument \n";
@@ -1670,12 +1976,12 @@ class leq extends Expression {
 		result += "\t lw $t1, 12($t1)    # decode integers\n";
 		result += "\t lw $t2, 12($a0)    \n";
 		result += "\t addi $t2, $t2, 1  # subtract 1 from RHS because a < b <=> a <= b + 1 over integers \n";
-		
+	
+
 		result += "\t slt $t0, $t1, $t2   # result of division in $t0\n";
 		result += env.codeSetBoolPointer("$t0", "$a0");
 
-		result += "\t lw $ra, 8($sp)     # restore ra after addition \n";
-		result += "\t addi $sp, $sp, 8   # pop stack after addition\n";
+		result += env.codeStackPop(4);
 		return result;
 	}
 
@@ -1901,20 +2207,19 @@ class new_ extends Expression {
 
 
     public String getCode(CompliationEnvironment env) {
-		String result = "";
-		result += "\t addi $sp, $sp, -12  # push stack for division\n";
-		result += "\t sw $ra, 8($sp)     # store first result \n";
-		result += "\t sw $a0, 4($sp)     # store ra \n";
-		
-
-		result += "\t la $a0, " + type_name + CgenSupport.PROTOBJ_SUFFIX +"     # store pointer to prototype object in a0 \n";
+    	String result = "";
+    	//copy prototype object
+    	if (type_name != TreeConstants.SELF_TYPE)
+    	{
+    		result += "\t la $a0, " + type_name + CgenSupport.PROTOBJ_SUFFIX +"     # store pointer to prototype object in a0 \n";
+    	}
+    	else
+    	{
+    		//TODO
+    	}
 		result += "\t jal Object.copy    # Create new object \n";
+		//call initialization
 		result += "\t jal " + type_name + "_init" + "    # Create new object \n";
-		//TODO initialization of values
-		
-
-		result += "\t lw $ra, 8($sp)     # restore ra after addition \n";
-		result += "\t addi $sp, $sp, 12   # pop stack after addition\n";
 		return result;
 	}
 
@@ -1958,6 +2263,25 @@ class isvoid extends Expression {
       * */
     public void code(PrintStream s) {
     }
+    
+    public String getCode(CompliationEnvironment env) {
+    	String result = "";
+    	result += e1.getCode(env);
+
+		String trueRef  = BoolConst.truebool.getCodeRef(),
+    	       falseRef = BoolConst.falsebool.getCodeRef();
+		//falseRef = trueRef;
+		String falseLabel = env.genLabel("IsFalse");
+		String afterLabel = env.genLabel("AfterBoolSet");
+		
+		result += "\t beq " + "$a0" + ", $zero, " + falseLabel + "\n";
+		result += "\t la "+ "$a0" + ", " + falseRef + "\n";
+		result += "\t j " + afterLabel + "\n";
+		result += "\t " + falseLabel + CgenSupport.LABEL + "\n";
+		result += "\t la "+ "$a0" + ", " + trueRef + "\n";
+		result += "\t " + afterLabel + CgenSupport.LABEL + "\n";
+    	return result;
+    }
 
 
 }
@@ -1997,7 +2321,7 @@ class no_expr extends Expression {
     }
     
     public String getCode(CompliationEnvironment env) {
-		return "\t # const: Do nothing!\n";
+		return "\t move $a0, $zero # no expression returns VOID!\n"; // TODO
 	}
 
 
@@ -2042,7 +2366,29 @@ class object extends Expression {
     }
 
     public String getCode(CompliationEnvironment env) {
-		return "\t # const: variable reference\n";
+    	String result = "";
+    	CompliationEnvironment.Binding localBinding = env.getBinding(name);
+    	
+    	if (name == TreeConstants.self)
+    	{
+    		result += "\t move $a0, $s0 #self object\n";
+    		
+    	}
+    	else if (localBinding != null)
+    	{
+    		result += "\t#Local binding for " + name + " \n";
+    		result += "\t lw $a0, " + localBinding.fpOffset + "($fp)\n";
+    	}
+    	else {
+    		int attribOffset = env.classdef.getAttributeOffset(name);
+    		if (attribOffset >= 0) {
+        		result += "\t#Attribute binding for " + name + " \n";
+        		result += "\t lw $a0, " + attribOffset + "($s0)\n";
+    		} else {
+        		result += "\t#ERROR NO BINDING for " + name + " \n";
+    		}
+    	}
+    	return result;
 	}
 
 }

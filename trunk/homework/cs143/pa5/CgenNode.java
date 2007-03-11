@@ -270,9 +270,89 @@ class CgenNode extends class_ {
 		this.classTag = classTag;
 	}
 
+	/**
+	 Object initialization is the other tricky part of implementation.  Each object has a label
+called `classname_init' that corresponds to its initialization procedure.  After an object
+has been copied into a new memory location with Object.copy and the prototype object pointer
+in the $a0 register, this segment of code is called.  It will not modify $a0 and will
+follow the semantics specified in the `new' operational semantics.  The init procedure
+is fairly fairly tricky because it is has similar semantics to method definitions.
+The prototype objects already provide the default values for each attribute.  Next,
+the superclass's initialization procedure is called. Finally, Each
+attribute initialization expression is evaluated in the order of declaration in
+a static environment with the current class as its context class, and the newly
+initialized object is returned.
+	 */
 	public void emitInitialization(CgenClassTable ctable, PrintStream str) {
-		str.println(getName() + CgenSupport.CLASSINIT_SUFFIX + CgenSupport.LABEL);
-    	str.println("jr $ra # TODO INITIALIZATION"); //
+		str.println(initializationLabel() + CgenSupport.LABEL);
+		CompliationEnvironment env = new CompliationEnvironment(ctable, this);
+		if (parent == null)
+		{
+			//call parent initializer
+			str.println("jal " + initializationLabel());
+		}
+		//create frame for initialization of attributes
+		int nonArgumentFrameBytes = 12;
+		int stackSize = nonArgumentFrameBytes;
+    	str.println("\t sw $fp,  0($sp) # store frame pointer in top-most portion of stack");
+    	str.println("\t move $fp, $sp");
+		env.enterFrame();
+		str.print(env.codeStackPush(stackSize));
+    	str.println("\t sw $ra,  -4($fp) # store ra ");
+    	str.println("\t sw $s0,  -8($fp) # store ra ");
+    	
+    	//str.println("\t move $s0, $a0");
+    	
+    	//initialize all attributes
+		for (int i=0; i < canonicalAttributesList().size(); i++) {
+			attr attrib = canonicalAttributesList().get(i);
+			if (attrib.init == null || attrib.init instanceof no_expr)
+			{
+				str.println("\t #no init for attribute -> VOID" + attrib.name);
+				str.print("\t sw $zero " + getAttributeOffset(attrib) + "($s0)\n");
+			}
+			else
+			{
+				str.print(attrib.init.getCode(env));
+				str.print("\t sw $a0 " + getAttributeOffset(attrib) + "($s0)\n");
+			}
+		}
+
+		//pop frame
+    	str.println("\t lw $ra,  -4($fp) # load back ra ");
+    	str.println("\t lw $s0,  -8($fp) # load back ra ");
+    	str.println("\t lw $fp,   0($fp) # store frame pointer in top-most portion of stack");
+    	str.print(env.codeStackPop(stackSize));
+    	str.println("\t jr $ra");
+	}
+	
+	public String getCodeForAttributeRef(AbstractSymbol sym, String toRegister, String objPointerRegister) {
+		return "\t lw " + toRegister + " " + getAttributeOffset(sym) + "(" + objPointerRegister + ")\n";
+	}
+	
+	public int getAttributeOffset(attr attrib) {
+		return getAttributeOffset(attrib.name);
+	}
+	
+	public int getAttributeOffset(AbstractSymbol sym) {
+		for (int i=0; i < canonicalAttributesList().size(); i++) {
+			if (sym == canonicalAttributesList().get(i).name)
+				return 12 + 4 * i;
+		}
+		return -1;
+		
+	}
+	
+	public method getMethodByName(AbstractSymbol sym )
+	{
+		for (method m : features.getMethods())
+			if (m.name == sym)
+				return m;
+		return null;
+	}
+	
+	public String initializationLabel() { 
+		return getName() + CgenSupport.CLASSINIT_SUFFIX;
 	}
 }
     
